@@ -19,10 +19,12 @@ primary_region = "fra" # Frankfurt — el usuario está en Suiza (alternativas c
 [http_service]
   internal_port = 3001
   force_https = true
-  # Subastas en vivo: la máquina NO debe dormirse (los countdowns viven en el server)
+  # Subastas en vivo: la máquina NO debe dormirse (los countdowns viven en el server).
+  # Encendido/apagado SIEMPRE manual: fly machine start/stop -a fanta-asta
+  # (auto_start apagado para que una visita —o un bot— no la prenda y quede cobrando)
   auto_stop_machines = "off"
-  auto_start_machines = true
-  min_machines_running = 1
+  auto_start_machines = false
+  min_machines_running = 0
 
 [[vm]]
   memory = "512mb"
