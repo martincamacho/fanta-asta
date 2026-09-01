@@ -1,0 +1,242 @@
+@import 'tailwindcss';
+
+/* ————— Fanta Asta — identidad familia Fantacalcio —————
+   Tokens exactos del CSS de fantacalcio.it:
+     primary   hsl(217 93% 52%)  azul
+     navy      hsl(229 26% 24%)  dark
+     secondary hsl(19 95% 64%)   naranja
+     success   hsl(96 70% 46%)   verde
+     danger    hsl(350 98% 65%)  rojo
+     info      hsl(195 100% 45%) celeste
+     alt       hsl(257 76% 55%)  violeta
+   Contextos:
+     - raíz / .theme-dark → vistas de asta (buzzer, tablero): navy nocturno.
+     - .theme-light       → páginas de sitio (home, ligas, admin): claro fantacalcio.
+   Las utilidades usan var(--color-*), así que cada scope re-mapea la misma clase. */
+
+@theme {
+  /* familia fantacalcio (absolutos, iguales en ambos temas) */
+  --color-primary: hsl(217 93% 52%);
+  --color-navy: hsl(229 26% 24%);
+  --color-navy-deep: hsl(230 27% 14%);
+  --color-secondary: hsl(19 95% 64%);
+  --color-success: hsl(96 70% 42%);
+  --color-info: hsl(195 100% 42%);
+  --color-alt: hsl(257 76% 55%);
+
+  /* superficie/tinta contextuales — default: navy nocturno (vistas de asta) */
+  --color-pitch-950: hsl(230 28% 9%);
+  --color-pitch-900: hsl(230 27% 12%);
+  --color-pitch-800: hsl(230 25% 17%);
+  --color-pitch-700: hsl(230 24% 23%);
+  --color-pitch-600: hsl(229 22% 32%);
+  --color-chalk: hsl(228 40% 95%);
+  --color-chalk-dim: hsl(228 20% 70%);
+  --color-chalk-faint: hsl(228 13% 48%);
+  /* acento de plata/ofertas: naranja secondary en el asta */
+  --color-gold: hsl(19 95% 64%);
+  --color-danger: hsl(350 98% 65%);
+
+  /* roles, convención oficial fantacalcio: P naranja/amarillo, D verde, C azul, A rojo */
+  --color-role-p: hsl(41 100% 49%);
+  --color-role-d: hsl(96 70% 42%);
+  --color-role-c: hsl(217 93% 52%);
+  --color-role-a: hsl(350 98% 65%);
+
+  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-pitch-950);
+  color: var(--color-chalk);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+/* Páginas de sitio: look fantacalcio claro (cards blancas, tinta navy, acento azul) */
+.theme-light {
+  color-scheme: light;
+  --color-pitch-950: hsl(220 27% 95%); /* fondo de página gris-azulado */
+  --color-pitch-900: hsl(220 30% 97%); /* fondo de inputs */
+  --color-pitch-800: #ffffff; /* cards */
+  --color-pitch-700: hsl(220 27% 92%); /* hover */
+  --color-pitch-600: hsl(220 20% 84%);
+  --color-chalk: hsl(229 26% 18%); /* tinta navy */
+  --color-chalk-dim: hsl(229 14% 42%);
+  --color-chalk-faint: hsl(228 11% 62%);
+  --color-gold: hsl(217 93% 47%); /* acento del sitio → azul primary */
+  --color-danger: hsl(350 75% 52%);
+  color: var(--color-chalk);
+}
+
+/* Re-override para islas oscuras dentro de páginas claras (header navy del admin) */
+.theme-dark {
+  color-scheme: dark;
+  --color-pitch-950: hsl(230 28% 9%);
+  --color-pitch-900: hsl(230 27% 12%);
+  --color-pitch-800: hsl(230 25% 17%);
+  --color-pitch-700: hsl(230 24% 23%);
+  --color-pitch-600: hsl(229 22% 32%);
+  --color-chalk: hsl(228 40% 95%);
+  --color-chalk-dim: hsl(228 20% 70%);
+  --color-chalk-faint: hsl(228 13% 48%);
+  --color-gold: hsl(19 95% 64%);
+  --color-danger: hsl(350 98% 65%);
+  color: var(--color-chalk);
+}
+
+/* Ambiente nocturno de las vistas de asta: navy con reflejos azul/violeta */
+.pitch-bg {
+  background-color: hsl(230 28% 8%);
+  background-image:
+    radial-gradient(80rem 40rem at 15% -10%, hsl(217 93% 52% / 0.14), transparent 60%),
+    radial-gradient(70rem 36rem at 85% -10%, hsl(257 76% 55% / 0.1), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Fondo de páginas de sitio */
+.site-bg {
+  background-color: hsl(220 27% 95%);
+  background-image: linear-gradient(180deg, hsl(220 30% 92%), hsl(220 27% 95%) 240px);
+}
+
+/* Sombra suave fantacalcio para cards en tema claro */
+.theme-light [class*='rounded-2xl'] {
+  box-shadow:
+    0 1px 2px hsl(229 40% 20% / 0.06),
+    0 6px 20px hsl(229 40% 20% / 0.07);
+}
+
+/* hairline contextual */
+.chalk-line {
+  border-color: color-mix(in srgb, var(--color-chalk) 16%, transparent);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ————— Animaciones ————— */
+
+@keyframes bid-pop {
+  0% {
+    transform: scale(1.28);
+    filter: brightness(1.6);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+.animate-bid-pop {
+  animation: bid-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: rise-in 0.4s ease-out both;
+}
+
+@keyframes sold-burst {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-sold {
+  animation: sold-burst 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+
+@keyframes pulse-danger {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.animate-pulse-danger {
+  animation: pulse-danger 0.5s ease-in-out infinite;
+}
+
+@keyframes shake-x {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
+  }
+}
+.animate-shake {
+  animation: shake-x 0.3s ease-in-out;
+}
+
+@keyframes ticker-glow {
+  0% {
+    text-shadow: 0 0 24px hsl(19 95% 64% / 0.9);
+  }
+  100% {
+    text-shadow: 0 0 0 hsl(19 95% 64% / 0);
+  }
+}
+.animate-ticker-glow {
+  animation: ticker-glow 0.8s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

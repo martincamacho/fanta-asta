@@ -1,0 +1,22 @@
+{
+  "name": "fanta-asta",
+  "private": true,
+  "packageManager": "pnpm@10.11.0",
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@fanta/shared": "workspace:*",
+    "socket.io-client": "^4.8.3",
+    "tsx": "^4.23.13"
+  }
+}

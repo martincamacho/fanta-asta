@@ -1,0 +1,30 @@
+# Fly.io — https://fly.io/docs/
+# Pasos completos en DEPLOY.md. Cambiá "app" si el nombre está tomado.
+app = "fanta-asta"
+primary_region = "fra" # Frankfurt — el usuario está en Suiza (alternativas cercanas: cdg París, ams Ámsterdam)
+
+[build]
+  # usa el Dockerfile de la raíz
+
+[env]
+  PORT = "3001"
+  DB_PATH = "/data/fanta.sqlite"
+  # APP_ORIGIN = "https://fanta-asta.fly.dev"   # para los links de invitación por email
+  # RESEND_API_KEY va como secret: fly secrets set RESEND_API_KEY=re_...
+
+[mounts]
+  source = "fanta_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # Subastas en vivo: la máquina NO debe dormirse (los countdowns viven en el server)
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

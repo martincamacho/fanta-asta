@@ -1,0 +1,529 @@
+C,T,M,Nome,Squadra,Quotazione,ID,EID
+P,P,Por,Svilar,Roma,19,5841,5841
+P,P,Por,Carnesecchi,Atalanta,17,4431,4431
+P,P,Por,Martinez Jo.,Inter,17,5116,5116
+P,P,Por,Vicario,Juventus,17,4964,4964
+P,P,Por,Butez,Como,15,6966,6966
+P,P,Por,Maignan,Milan,15,4312,4312
+P,P,Por,De Gea,Fiorentina,11,2521,2521
+P,P,Por,Meret,Napoli,11,572,572
+P,P,Por,Skorupski,Bologna,10,133,133
+P,P,Por,Caprile,Cagliari,10,4360,4360
+P,P,Por,Mandas,Lazio,10,6482,6482
+P,P,Por,Okoye,Udinese,9,6462,6462
+P,P,Por,Perri,Torino,9,6534,6534
+P,P,Por,Bijlow,Genoa,8,7332,7332
+P,P,Por,Falcone,Lecce,8,2134,2134
+P,P,Por,Muric,Sassuolo,7,4236,4236
+P,P,Por,Daffara,Parma,6,7411,7411
+P,P,Por,Stankovic F.,Venezia,6,6248,6248
+P,P,Por,Palmisani,Frosinone,5,6415,6415
+P,P,Por,Milinkovic-Savic V.,Napoli,5,2170,2170
+P,P,Por,Thiam,Monza,4,4485,4485
+P,P,Por,Desplanches,Frosinone,2,7463,7463
+P,P,Por,Provedel,Inter,2,2814,2814
+P,P,Por,Corvi,Parma,2,6662,6662
+P,P,Por,Sportiello,Atalanta,1,4,4
+P,P,Por,Happonen,Bologna,1,7533,7533
+P,P,Por,Pessina Mas.,Bologna,1,7172,7172
+P,P,Por,Sherri,Cagliari,1,6650,6650
+P,P,Por,Tornqvist,Monza,1,7301,7301
+P,P,Por,Vigorito,Como,1,2809,2809
+P,P,Por,Christensen O.,Fiorentina,1,6403,6403
+P,P,Por,Lezzerini,Fiorentina,1,158,158
+P,P,Por,Lolic,Frosinone,1,7466,7466
+P,P,Por,Sommariva,Genoa,1,219,219
+P,P,Por,Stolz,Genoa,1,6569,6569
+P,P,Por,Di Gennaro,Inter,1,1926,1926
+P,P,Por,Pinsoglio,Juventus,1,1930,1930
+P,P,Por,Motta,Lazio,1,7337,7337
+P,P,Por,Renzetti,Lazio,1,7534,7534
+P,P,Por,Terracciano,Milan,1,2815,2815
+P,P,Por,Torriani,Milan,1,6813,6813
+P,P,Por,Strajnar,Monza,1,7475,7475
+P,P,Por,Contini,Napoli,1,2845,2845
+P,P,Por,De Marzi,Roma,1,7048,7048
+P,P,Por,Gollini,Roma,1,610,610
+P,P,Por,Russo A.,Sassuolo,1,4518,4518
+P,P,Por,Turati,Sassuolo,1,4867,4867
+P,P,Por,Mascardi,Torino,1,7457,7457
+P,P,Por,Paleari,Torino,1,5320,5320
+P,P,Por,Siviero,Torino,1,7363,7363
+P,P,Por,Padelli,Udinese,1,543,543
+P,P,Por,Piana,Udinese,1,5707,5707
+P,P,Por,Grandi,Venezia,1,6671,6671
+P,P,Por,Pozzi,Venezia,1,7531,7531
+P,P,Por,Satalino,Sassuolo,1,2127,2127
+P,P,Por,Penev,Lecce,1,7557,7557
+P,P,Por,Pisseri,Frosinone,1,7560,7560
+P,P,Por,Radunovic,Cagliari,1,3,3
+P,P,Por,Montipò,Venezia,1,4957,4957
+P,P,Por,Bleve,Lecce,1,4468,4468
+P,P,Por,Grabara,Juventus,1,7603,7603
+P,P,Por,Mrozek,Udinese,1,7611,7611
+P,P,Por,Ghidotti,Parma,1,2874,2874
+D,P,Por,Dimarco,Inter,31,254,254
+D,P,Por,Wesley,Roma,18,7181,7181
+D,P,Por,Molina N.,Roma,18,4998,4998
+D,P,Por,Bremer,Juventus,16,2788,2788
+D,P,Por,Mancini,Roma,16,2296,2296
+D,P,Por,Akanji,Inter,15,4159,4159
+D,P,Por,Rrahmani,Napoli,15,4409,4409
+D,P,Por,Bastoni,Inter,14,2120,2120
+D,P,Por,Kalulu,Juventus,14,4976,4976
+D,P,Por,Pavlovic,Milan,14,5022,5022
+D,P,Por,Gila,Milan,13,5833,5833
+D,P,Por,N'Dicka,Roma,13,4317,4317
+D,P,Por,Solet,Udinese,13,6956,6956
+D,P,Por,Bisseck,Inter,12,6217,6217
+D,P,Por,Stones,Inter,12,2514,2514
+D,P,Por,Di Lorenzo,Napoli,12,2816,2816
+D,P,Por,Ostigard,Genoa,11,5750,5750
+D,P,Por,Hermoso,Roma,11,4807,4807
+D,P,Por,Spence,Inter,11,5982,5982
+D,P,Por,Scalvini,Atalanta,10,5526,5526
+D,P,Por,Ramon,Como,10,6869,6869
+D,P,Por,Chalobah T.,Como,10,5641,5641
+D,P,Por,Dodò,Fiorentina,9,5885,5885
+D,P,Por,Vasquez,Genoa,9,5514,5514
+D,P,Por,Vojvoda,Udinese,9,4994,4994
+D,P,Por,Kamara H.,Udinese,9,5555,5555
+D,P,Por,Zappacosta,Atalanta,8,554,554
+D,P,Por,Miranda J.,Bologna,8,4734,4734
+D,P,Por,Norton-Cuffy,Genoa,8,6814,6814
+D,P,Por,Celik,Juventus,8,4657,4657
+D,P,Por,Cambiaso,Juventus,8,5520,5520
+D,P,Por,Doekhi,Lazio,8,6320,6320
+D,P,Por,Tiago Gabriel,Lecce,8,6989,6989
+D,P,Por,Bartesaghi,Milan,8,6496,6496
+D,P,Por,Spinazzola,Napoli,8,1852,1852
+D,P,Por,Delprato,Parma,8,6664,6664
+D,P,Por,Valeri,Parma,8,5862,5862
+D,P,Por,Koulierakis,Roma,8,7529,7529
+D,P,Por,Comuzzo,Torino,8,6495,6495
+D,P,Por,Couto,Como,8,6727,6727
+D,P,Por,Theate,Bologna,8,5675,5675
+D,P,Por,Diego Carlos,Parma,8,4137,4137
+D,P,Por,Hien,Atalanta,7,6046,6046
+D,P,Por,Lucumì,Juventus,7,6042,6042
+D,P,Por,Zortea,Bologna,7,4433,4433
+D,P,Por,Mina,Cagliari,7,4210,4210
+D,P,Por,Obert,Cagliari,7,5701,5701
+D,P,Por,Dragusin,Fiorentina,7,5365,5365
+D,P,Por,Jimenez A.,Fiorentina,7,6531,6531
+D,P,Por,Bracaglia,Frosinone,7,7469,7469
+D,P,Por,Tavares N.,Lazio,7,5620,5620
+D,P,Por,Gabbia,Milan,7,4401,4401
+D,P,Por,Mangas,Monza,7,7485,7485
+D,P,Por,Idzes,Sassuolo,7,6672,6672
+D,P,Por,Coco,Torino,7,6642,6642
+D,P,Por,Ismajli,Torino,7,5010,5010
+D,P,Por,Badiashile,Napoli,7,4664,4664
+D,P,Por,Sutalo J.,Lazio,7,7580,7580
+D,P,Por,Belghali,Torino,7,7220,7220
+D,P,Por,Kolasinac,Atalanta,6,2640,2640
+D,P,Por,Bellanova,Atalanta,6,4887,4887
+D,P,Por,Bernasconi,Atalanta,6,7219,7219
+D,P,Por,Heggem,Bologna,6,7212,7212
+D,P,Por,Holm,Bologna,6,5678,5678
+D,P,Por,Kaiki,Como,6,7414,7414
+D,P,Por,Valle,Como,6,6867,6867
+D,P,Por,Viery,Fiorentina,6,7410,7410
+D,P,Por,Monterisi,Frosinone,6,4952,4952
+D,P,Por,Oyono A.,Frosinone,6,6238,6238
+D,P,Por,Marcandalli,Genoa,6,6660,6660
+D,P,Por,Pavard,Inter,6,4177,4177
+D,P,Por,Carlos Augusto,Inter,6,5877,5877
+D,P,Por,Romagnoli,Lazio,6,460,460
+D,P,Por,Pedraza,Lazio,6,4817,4817
+D,P,Por,Marusic,Lazio,6,2188,2188
+D,P,Por,Veiga D.,Lecce,6,6990,6990
+D,P,Por,Gallo,Lecce,6,4502,4502
+D,P,Por,Tomori,Milan,6,4751,4751
+D,P,Por,Beukema,Napoli,6,6202,6202
+D,P,Por,Buongiorno,Napoli,6,2724,2724
+D,P,Por,Kristensen T.,Atalanta,6,6485,6485
+D,P,Por,Obrador,Sassuolo,6,7329,7329
+D,P,Por,Fortini,Torino,6,7069,7069
+D,P,Por,Leysen F.,Sassuolo,6,7564,7564
+D,P,Por,Balerdi,Roma,6,4705,4705
+D,P,Por,Caleta-Car,Sassuolo,6,4147,4147
+D,P,Por,Sugawara,Cagliari,6,7621,7621
+D,P,Por,Kofler,Cagliari,5,7532,7532
+D,P,Por,Zè Pedro,Cagliari,5,7274,7274
+D,P,Por,Kempf,Como,5,6893,6893
+D,P,Por,Valdepenas,Fiorentina,5,7294,7294
+D,P,Por,Calvani,Frosinone,5,7467,7467
+D,P,Por,Kelly L.,Juventus,5,6766,6766
+D,P,Por,Gaspar K.,Lecce,5,6632,6632
+D,P,Por,De Winter,Milan,5,5739,5739
+D,P,Por,Olivera,Napoli,5,5840,5840
+D,P,Por,Ghilardi,Roma,5,6631,6631
+D,P,Por,Doig,Sassuolo,5,5851,5851
+D,P,Por,Bella-Kotchap,Venezia,5,7253,7253
+D,P,Por,Correia T.,Venezia,5,4845,4845
+D,P,Por,Haps,Venezia,5,5695,5695
+D,P,Por,Kossounou,Atalanta,4,5578,5578
+D,P,Por,Vitik,Bologna,4,7068,7068
+D,P,Por,Rodriguez Ju.,Cagliari,4,7268,7268
+D,P,Por,Smolcic I.,Como,4,7014,7014
+D,P,Por,Pongracic,Fiorentina,4,5603,5603
+D,P,Por,Parisi,Fiorentina,4,5449,5449
+D,P,Por,Cittadini,Frosinone,4,5757,5757
+D,P,Por,Mitaj,Genoa,4,7537,7537
+D,P,Por,Gatti,Juventus,4,5831,5831
+D,P,Por,Provstgaard,Lazio,4,7012,7012
+D,P,Por,Floriani Mussolini,Lazio,4,7131,7131
+D,P,Por,Siebert,Lecce,4,7240,7240
+D,P,Por,Birindelli,Monza,4,5838,5838
+D,P,Por,Valenti,Parma,4,5307,5307
+D,P,Por,Rensch,Roma,4,6986,6986
+D,P,Por,Walukiewicz,Sassuolo,4,4374,4374
+D,P,Por,Comert,Torino,4,7526,7526
+D,P,Por,Kabasele,Udinese,4,4263,4263
+D,P,Por,Bertola,Udinese,4,5820,5820
+D,P,Por,Zanoli,Udinese,4,5527,5527
+D,P,Por,Arizala,Udinese,4,7312,7312
+D,P,Por,Moreno M.,Venezia,4,6890,6890
+D,P,Por,Hainaut,Venezia,4,6821,6821
+D,P,Por,Terzic,Frosinone,4,4375,4375
+D,P,Por,Favasuli,Napoli,4,7563,7563
+D,P,Por,Juan Jesus,Venezia,4,256,256
+D,P,Por,Casale,Bologna,3,5498,5498
+D,P,Por,Helland,Bologna,3,7326,7326
+D,P,Por,Idrissi R.,Cagliari,3,7125,7125
+D,P,Por,Ranieri L.,Fiorentina,3,4378,4378
+D,P,Por,Joao Mario,Fiorentina,3,7175,7175
+D,P,Por,Akpoguma,Frosinone,3,7540,7540
+D,P,Por,Estupinan,Milan,3,5273,5273
+D,P,Por,Lucchesi,Monza,3,6659,6659
+D,P,Por,Kouadio,Monza,3,7238,7238
+D,P,Por,Carboni A.,Monza,3,4925,4925
+D,P,Por,Troilo,Parma,3,7235,7235
+D,P,Por,Britschgi,Parma,3,7255,7255
+D,P,Por,Candè,Sassuolo,3,6985,6985
+D,P,Por,Palma,Udinese,3,6925,6925
+D,P,Por,Ebosse,Udinese,3,5994,5994
+D,P,Por,Halhal,Venezia,3,7538,7538
+D,P,Por,Schingtienne,Venezia,3,6892,6892
+D,P,Por,Sverko,Venezia,3,6673,6673
+D,P,Por,Franjic,Venezia,3,7478,7478
+D,P,Por,Odenthal,Sassuolo,3,7154,7154
+D,P,Por,Tchato,Frosinone,3,7605,7605
+D,P,Por,Kambwala,Como,3,6601,6601
+D,P,Por,Alhassane,Bologna,2,7483,7483
+D,P,Por,Van Der Brempt,Sassuolo,2,6896,6896
+D,P,Por,Otoa,Genoa,2,6977,6977
+D,P,Por,Puczka,Genoa,2,7413,7413
+D,P,Por,Sabelli,Genoa,2,791,791
+D,P,Por,Lazzari,Lazio,2,2263,2263
+D,P,Por,Pellegrini Lu.,Lazio,2,2728,2728
+D,P,Por,Jean,Lecce,2,6883,6883
+D,P,Por,Ndaba,Lecce,2,7182,7182
+D,P,Por,Diawara S.,Milan,2,7525,7525
+D,P,Por,Bakoune,Monza,2,7476,7476
+D,P,Por,Marin R.,Napoli,2,6638,6638
+D,P,Por,Ndiaye,Parma,2,7202,7202
+D,P,Por,Biraghi,Torino,2,252,252
+D,P,Por,Abankwah,Udinese,2,6021,6021
+D,P,Por,Sagrado,Venezia,2,6681,6681
+D,P,Por,Aurelio,Cagliari,2,7548,7548
+D,P,Por,Cinquegrano,Sassuolo,2,7573,7573
+D,P,Por,Terracciano F.,Milan,2,5812,5812
+D,P,Por,Lulli,Roma,2,7599,7599
+D,P,Por,Drobnic,Parma,2,7615,7615
+D,P,Por,De Silvestri,Bologna,1,487,487
+D,P,Por,Goldaniga,Como,1,418,418
+D,P,Por,Amey,Frosinone,1,5424,5424
+D,P,Por,Rugani,Juventus,1,294,294
+D,P,Por,Cabal,Juventus,1,6039,6039
+D,P,Por,Patric,Lazio,1,327,327
+D,P,Por,Antov,Monza,1,5399,5399
+D,P,Por,Marianucci,Napoli,1,6809,6809
+D,P,Por,Mazzocchi,Venezia,1,5481,5481
+D,P,Por,Carboni F.,Parma,1,6149,6149
+D,P,Por,Ziolkowski,Monza,1,7260,7260
+D,P,Por,Pieragnolo,Sassuolo,1,7156,7156
+D,P,Por,Gomes,Venezia,1,7454,7454
+D,P,Por,Omar Fayed,Frosinone,1,7553,7553
+D,P,Por,Maye,Monza,1,7604,7604
+D,P,Por,Dembelè A.,Lecce,1,6826,6826
+C,P,Por,Paz N.,Como,29,6875,6875
+C,P,Por,Calhanoglu,Inter,28,2194,2194
+C,P,Por,McTominay,Napoli,27,4777,4777
+C,P,Por,Orsolini,Bologna,25,2167,2167
+C,P,Por,Pulisic,Milan,24,2423,2423
+C,P,Por,Rabiot,Milan,23,2379,2379
+C,P,Por,Baturina,Como,20,7126,7126
+C,P,Por,Mora,Roma,20,7556,7556
+C,P,Por,Da Cunha,Como,18,5559,5559
+C,P,Por,Barella,Inter,18,1870,1870
+C,P,Por,Zaniolo,Udinese,18,2766,2766
+C,P,Por,McKennie,Juventus,17,4973,4973
+C,P,Por,De Bruyne,Napoli,17,2517,2517
+C,P,Por,Zaccagni,Lazio,16,632,632
+C,P,Por,Atta,Fiorentina,15,6908,6908
+C,P,Por,Samardzic,Atalanta,13,5119,5119
+C,P,Por,Conceicao,Juventus,13,6884,6884
+C,P,Por,Taylor K.,Lazio,13,7314,7314
+C,P,Por,Vlasic,Torino,13,5687,5687
+C,P,Por,Ederson D.S.,Atalanta,12,5792,5792
+C,P,Por,Gudmundsson A.,Fiorentina,12,5800,5800
+C,P,Por,Zielinski,Inter,12,152,152
+C,P,Por,Modric,Milan,12,2606,2606
+C,P,Por,Ekkelenkamp,Udinese,12,6684,6684
+C,P,Por,Jones C.,Inter,12,5172,5172
+C,P,Por,Gonzalez N.,Juventus,12,4179,4179
+C,P,Por,Kessiè,Atalanta,12,1850,1850
+C,P,Por,Rodriguez Je.,Como,11,7129,7129
+C,P,Por,Baldanzi,Genoa,11,5823,5823
+C,P,Por,Alajbegovic,Juventus,11,7436,7436
+C,P,Por,Saelemaekers,Milan,11,4892,4892
+C,P,Por,Mastantuono,Fiorentina,11,7078,7078
+C,P,Por,Moreira,Milan,11,6372,6372
+C,P,Por,Bernardeschi,Bologna,10,184,184
+C,P,Por,Rowe,Bologna,10,6844,6844
+C,P,Por,Perrone,Como,10,6151,6151
+C,P,Por,Frattesi,Lazio,10,2848,2848
+C,P,Por,Zambo Anguissa,Napoli,10,4220,4220
+C,P,Por,Vergara,Napoli,10,7223,7223
+C,P,Por,Konè M.,Roma,10,5589,5589
+C,P,Por,Thorstvedt,Sassuolo,10,5844,5844
+C,P,Por,Diouf,Inter,9,6274,6274
+C,P,Por,Sucic P.,Inter,9,7070,7070
+C,P,Por,Locatelli,Juventus,9,827,827
+C,P,Por,Thuram K.,Juventus,9,5562,5562
+C,P,Por,Cancellieri,Lazio,9,5500,5500
+C,P,Por,Isaksen,Lazio,9,6398,6398
+C,P,Por,Colpani,Monza,9,5878,5878
+C,P,Por,Politano,Napoli,9,536,536
+C,P,Por,Cristante,Roma,9,779,779
+C,P,Por,Volpato,Sassuolo,9,5735,5735
+C,P,Por,Casadei,Torino,9,5888,5888
+C,P,Por,Pellegrini Lo.,Roma,9,530,530
+C,P,Por,Pasalic,Atalanta,8,2077,2077
+C,P,Por,Odgaard,Bologna,8,2765,2765
+C,P,Por,Cambiaghi,Bologna,8,4436,4436
+C,P,Por,Mandragora,Fiorentina,8,1933,1933
+C,P,Por,Calò,Frosinone,8,7472,7472
+C,P,Por,Chukwueze,Milan,8,4856,4856
+C,P,Por,Lobotka,Napoli,8,4287,4287
+C,P,Por,Konè I.,Sassuolo,8,6717,6717
+C,P,Por,Schmid,Frosinone,8,7551,7551
+C,P,Por,Hutchinson,Milan,8,7618,7618
+C,P,Por,Gaetano,Atalanta,7,4364,4364
+C,P,Por,Zalewski,Atalanta,7,5422,5422
+C,P,Por,Ferguson,Bologna,7,5858,5858
+C,P,Por,Adopo,Cagliari,7,4870,4870
+C,P,Por,Romano,Cagliari,7,7311,7311
+C,P,Por,Fagioli,Fiorentina,7,4465,4465
+C,P,Por,Ndour,Fiorentina,7,6294,6294
+C,P,Por,Frendrup,Genoa,7,5791,5791
+C,P,Por,Koopmeiners,Juventus,7,5685,5685
+C,P,Por,Rovella,Lazio,7,4459,4459
+C,P,Por,Coulibaly L.,Lecce,7,5504,5504
+C,P,Por,Akinsanmiro,Monza,7,6593,6593
+C,P,Por,Bernabè,Parma,7,6666,6666
+C,P,Por,Pisilli,Roma,7,6190,6190
+C,P,Por,Karlstrom,Udinese,7,6680,6680
+C,P,Por,Unai Gomez,Udinese,7,6783,6783
+C,P,Por,Sow,Genoa,7,5946,5946
+C,P,Por,Elmas,Atalanta,7,4479,4479
+C,P,Por,Monteiro J.,Lecce,7,7619,7619
+C,P,Por,Sarr P.,Juventus,7,5680,5680
+C,P,Por,Pobega,Bologna,6,5298,5298
+C,P,Por,Winks,Cagliari,6,4260,4260
+C,P,Por,Fazzini,Cagliari,6,6010,6010
+C,P,Por,Milla,Como,6,7412,7412
+C,P,Por,Caqueret,Como,6,5036,5036
+C,P,Por,Liberali,Como,6,6678,6678
+C,P,Por,Oulai,Fiorentina,6,7464,7464
+C,P,Por,Zerbin,Frosinone,6,5998,5998
+C,P,Por,Ellertsson,Genoa,6,6020,6020
+C,P,Por,Zhegrova,Juventus,6,5761,5761
+C,P,Por,Pierotti,Lecce,6,6549,6549
+C,P,Por,Pessina,Monza,6,2741,2741
+C,P,Por,Nicolussi Caviglia,Parma,6,4349,4349
+C,P,Por,Matic,Sassuolo,6,2528,2528
+C,P,Por,Adzic,Sassuolo,6,6677,6677
+C,P,Por,Bakola,Sassuolo,6,7036,7036
+C,P,Por,Cacciamani,Torino,6,7060,7060
+C,P,Por,Oristanio,Torino,6,6218,6218
+C,P,Por,Piotrowski,Udinese,6,7198,7198
+C,P,Por,Basic,Venezia,6,5674,5674
+C,P,Por,Tourè I.,Monza,6,7146,7146
+C,P,Por,Amondarain,Bologna,5,7528,7528
+C,P,Por,Felici,Cagliari,5,6640,6640
+C,P,Por,Meichtry,Genoa,5,7409,7409
+C,P,Por,Luis Henrique,Inter,5,5301,5301
+C,P,Por,Dele-Bashiru,Lazio,5,6629,6629
+C,P,Por,Jashari,Milan,5,7203,7203
+C,P,Por,Keita M.,Parma,5,6898,6898
+C,P,Por,Fitz-Jim,Torino,5,7535,7535
+C,P,Por,Gineitis,Torino,5,6170,6170
+C,P,Por,Busio,Venezia,5,5507,5507
+C,P,Por,Sohm,Venezia,5,5319,5319
+C,P,Por,Perez K.,Venezia,5,6994,6994
+C,P,Por,Cissè A.,Milan,5,6618,6618
+C,P,Por,De Roon,Roma,4,22,22
+C,P,Por,Moro N.,Bologna,4,6054,6054
+C,P,Por,Dominguez B.,Sassuolo,4,6895,6895
+C,P,Por,Addai,Como,4,7127,7127
+C,P,Por,Fabbian,Parma,4,6206,6206
+C,P,Por,Cichella,Frosinone,4,7473,7473
+C,P,Por,Koutsoupias,Frosinone,4,7474,7474
+C,P,Por,Fini,Frosinone,4,6506,6506
+C,P,Por,Amorim,Genoa,4,7341,7341
+C,P,Por,Messias,Genoa,4,4970,4970
+C,P,Por,Traorè Hj.,Genoa,4,2857,2857
+C,P,Por,Mkhitaryan,Inter,4,2529,2529
+C,P,Por,Douglas Luiz,Juventus,4,4911,4911
+C,P,Por,Cataldi,Lazio,4,333,333
+C,P,Por,Ngom,Lecce,4,7322,7322
+C,P,Por,Berisha M.,Lecce,4,6015,6015
+C,P,Por,Gandelman,Lecce,4,7318,7318
+C,P,Por,Fofana Y.,Milan,4,4686,4686
+C,P,Por,Ricci S.,Como,4,5453,5453
+C,P,Por,Loftus-Cheek,Milan,4,4199,4199
+C,P,Por,Folorunsho,Monza,4,6252,6252
+C,P,Por,Almqvist,Parma,4,6207,6207
+C,P,Por,El Aynaoui,Roma,4,6271,6271
+C,P,Por,Ilkhan,Torino,4,6005,6005
+C,P,Por,Njie,Fiorentina,4,6827,6827
+C,P,Por,Miller L.,Udinese,4,7208,7208
+C,P,Por,Grillitsch,Frosinone,4,7550,7550
+C,P,Por,Massolin,Cagliari,4,7579,7579
+C,P,Por,Sulemana I.,Sassuolo,3,6024,6024
+C,P,Por,Deiola,Cagliari,3,1871,1871
+C,P,Por,Brescianini,Fiorentina,3,4947,4947
+C,P,Por,Gelli F.,Frosinone,3,6241,6241
+C,P,Por,Masini,Frosinone,3,6917,6917
+C,P,Por,Stankovic A.,Inter,3,6503,6503
+C,P,Por,Gorter,Lecce,3,7248,7248
+C,P,Por,Maleh,Lecce,3,5457,5457
+C,P,Por,Musah,Milan,3,5295,5295
+C,P,Por,Colombo L.,Monza,3,7477,7477
+C,P,Por,Gilmour,Napoli,3,5131,5131
+C,P,Por,Ordonez C.,Parma,3,7138,7138
+C,P,Por,Sorensen O.,Parma,3,7209,7209
+C,P,Por,Diallo O.,Parma,3,7536,7536
+C,P,Por,Aboukhlal,Torino,3,7183,7183
+C,P,Por,Helgason,Venezia,3,5872,5872
+C,P,Por,Gagliardini,Cagliari,3,801,801
+C,P,Por,El Azzouzi O.,Bologna,2,6225,6225
+C,P,Por,Fadera,Cagliari,2,6815,6815
+C,P,Por,Hasa,Frosinone,2,6903,6903
+C,P,Por,Venturino,Genoa,2,6980,6980
+C,P,Por,Belahyane,Lazio,2,6191,6191
+C,P,Por,Ciurria,Monza,2,5880,5880
+C,P,Por,Cremaschi,Parma,2,7276,7276
+C,P,Por,Boloca,Sassuolo,2,6219,6219
+C,P,Por,Lipani,Sassuolo,2,6246,6246
+C,P,Por,Zarraga,Udinese,2,6212,6212
+C,P,Por,Chakvetadze,Udinese,2,7418,7418
+C,P,Por,Duncan,Venezia,2,526,526
+C,P,Por,Forson O.,Monza,2,6592,6592
+C,P,Por,Foe Ondoa,Monza,2,7574,7574
+C,P,Por,Jovanovic,Udinese,2,7092,7092
+C,P,Por,Liteta,Cagliari,1,7165,7165
+C,P,Por,Lahdo,Como,1,7357,7357
+C,P,Por,El Azzouzi A.,Frosinone,1,7456,7456
+C,P,Por,Kone B.,Frosinone,1,5725,5725
+C,P,Por,Przyborek,Lazio,1,7345,7345
+C,P,Por,Kaba,Lecce,1,6410,6410
+C,P,Por,Fofana Sa.,Lecce,1,7319,7319
+C,P,Por,Ilic,Lecce,1,5007,5007
+C,P,Por,Anjorin,Torino,1,6889,6889
+C,P,Por,Dagasso,Venezia,1,7481,7481
+C,P,Por,Laerke,Lecce,1,7571,7571
+C,P,Por,Comotto,Milan,1,7572,7572
+C,P,Por,Mout,Monza,1,7575,7575
+C,P,Por,Ciervo,Cagliari,1,5462,5462
+A,P,Por,Malen,Roma,38,5585,5585
+A,P,Por,Martinez L.,Inter,33,2764,2764
+A,P,Por,Thuram,Inter,28,4871,4871
+A,P,Por,Hojlund,Napoli,28,6052,6052
+A,P,Por,Ramos G.,Milan,27,6397,6397
+A,P,Por,Kolo Muani,Juventus,25,5951,5951
+A,P,Por,Kean,Fiorentina,24,2097,2097
+A,P,Por,Douvikas,Como,22,7017,7017
+A,P,Por,Yildiz,Juventus,22,6434,6434
+A,P,Por,Scamacca,Atalanta,19,2137,2137
+A,P,Por,Berardi,Sassuolo,19,531,531
+A,P,Por,Davis K.,Udinese,19,5637,5637
+A,P,Por,Krstovic,Atalanta,18,6435,6435
+A,P,Por,De Ketelaere,Atalanta,17,5995,5995
+A,P,Por,Esposito F.P.,Inter,17,7071,7071
+A,P,Por,Dybala,Roma,16,309,309
+A,P,Por,Dovbyk,Bologna,15,6675,6675
+A,P,Por,Laurientè,Sassuolo,15,6060,6060
+A,P,Por,Raspadori,Atalanta,14,4371,4371
+A,P,Por,Santos A.,Napoli,14,7351,7351
+A,P,Por,Pellegrino M.,Fiorentina,14,7023,7023
+A,P,Por,Castro S.,Roma,14,6572,6572
+A,P,Por,Simeone,Torino,14,2061,2061
+A,P,Por,Soulè,Roma,13,5734,5734
+A,P,Por,Esposito Se.,Sassuolo,12,4463,4463
+A,P,Por,Diao,Como,12,6967,6967
+A,P,Por,Pinamonti,Lazio,12,2038,2038
+A,P,Por,Kevin Carlos,Cagliari,12,7547,7547
+A,P,Por,Colombo,Genoa,11,4923,4923
+A,P,Por,Adams A.,Venezia,11,7484,7484
+A,P,Por,Dia,Lazio,10,5672,5672
+A,P,Por,Adams C.,Torino,10,6646,6646
+A,P,Por,Tourè E.,Parma,10,6229,6229
+A,P,Por,Romero D.,Parma,10,7554,7554
+A,P,Por,Raimondo,Frosinone,9,5436,5436
+A,P,Por,Ratkov,Lazio,9,7313,7313
+A,P,Por,Cutrone,Monza,9,2155,2155
+A,P,Por,Bowie,Sassuolo,9,7347,7347
+A,P,Por,Yeboah J.,Venezia,9,6904,6904
+A,P,Por,Bobcek,Frosinone,9,7612,7612
+A,P,Por,Piccoli,Bologna,8,4359,4359
+A,P,Por,Ghedjemis,Frosinone,8,6530,6530
+A,P,Por,Vitinha O.,Genoa,8,6164,6164
+A,P,Por,David,Juventus,8,5544,5544
+A,P,Por,Geubbels,Lecce,8,5029,5029
+A,P,Por,Osmajic,Genoa,8,7600,7600
+A,P,Por,Bonny,Inter,7,6669,6669
+A,P,Por,Boga,Juventus,7,2832,2832
+A,P,Por,Varela G.,Monza,7,7523,7523
+A,P,Por,Rrahmani Al.,Venezia,7,7449,7449
+A,P,Por,Sulemana K.,Atalanta,6,5918,5918
+A,P,Por,Mutandwa,Cagliari,6,6598,6598
+A,P,Por,Kvernadze,Frosinone,6,6204,6204
+A,P,Por,Noslin,Lazio,6,6556,6556
+A,P,Por,Stulic,Lecce,6,7252,7252
+A,P,Por,Neres,Napoli,6,6831,6831
+A,P,Por,Zapata D.,Torino,6,608,608
+A,P,Por,Zeballos,Monza,6,7620,7620
+A,P,Por,Maldini,Cagliari,5,4896,4896
+A,P,Por,Birligea,Frosinone,5,7610,7610
+A,P,Por,Ngonge,Monza,5,6145,6145
+A,P,Por,Borrelli,Cagliari,4,6243,6243
+A,P,Por,Mendy P.,Cagliari,4,7374,7374
+A,P,Por,Havel,Genoa,4,7453,7453
+A,P,Por,N'Dri,Lecce,4,7001,7001
+A,P,Por,Camarda,Milan,4,6519,6519
+A,P,Por,Mota,Monza,4,5882,5882
+A,P,Por,Giovane,Napoli,4,7162,7162
+A,P,Por,Lang,Napoli,4,7120,7120
+A,P,Por,Lucca,Napoli,4,6215,6215
+A,P,Por,Frigan,Parma,4,7213,7213
+A,P,Por,Kulenovic,Torino,4,7349,7349
+A,P,Por,Gueye,Udinese,4,7272,7272
+A,P,Por,Adorante,Venezia,4,4387,4387
+A,P,Por,Robinson J.,Monza,4,7546,7546
+A,P,Por,Milik,Juventus,4,2012,2012
+A,P,Por,Fatah,Lecce,4,7602,7602
+A,P,Por,Kuhn,Como,3,7128,7128
+A,P,Por,Ekhator,Juventus,3,6822,6822
+A,P,Por,Elphege,Parma,3,7342,7342
+A,P,Por,Lontani,Parma,3,7561,7561
+A,P,Por,Trepy,Cagliari,1,7317,7317
+A,P,Por,Azon,Como,1,7027,7027
+A,P,Por,Vaz,Roma,1,6981,6981
+A,P,Por,Bayo V.,Udinese,1,7161,7161
+A,P,Por,Lisman,Venezia,1,7408,7408
+A,P,Por,Lauberbach,Venezia,1,7482,7482
+A,P,Por,De Martis,Parma,1,7568,7568
