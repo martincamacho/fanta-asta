@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { InviteInfo, LeagueDetail, RoomConfig } from '@fanta/shared';
 import { useAuth } from '../authStore';
+import { useT } from '../i18n';
 import { createLeagueAuction, getLeague, sendInvites } from '../lib/leagueApi';
 import { persist } from '../lib/persist';
 import { AuctionConfigForm, labelCls } from '../components/AuctionConfigForm';
@@ -10,6 +11,7 @@ export default function Liga() {
   const { id = '' } = useParams();
   const status = useAuth((s) => s.status);
   const location = useLocation();
+  const { t } = useT();
   const [detail, setDetail] = useState<LeagueDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,16 +20,20 @@ export default function Liga() {
       setDetail(await getLeague(id));
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cargar la liga.');
+      setError(err instanceof Error ? err.message : t('league.openErr'));
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     if (status === 'authed') void load();
   }, [status, load]);
 
   if (status === 'loading') {
-    return <main className="flex min-h-[60dvh] items-center justify-center text-chalk-dim">Un momento…</main>;
+    return (
+      <main className="flex min-h-[60dvh] items-center justify-center text-chalk-dim">
+        {t('leagues.loading')}
+      </main>
+    );
   }
   if (status === 'anonymous') {
     return <Navigate to={`/entrar?next=${encodeURIComponent(location.pathname)}`} replace />;
@@ -35,37 +41,49 @@ export default function Liga() {
   if (error) {
     return (
       <main className="mx-auto flex max-w-md flex-col items-center px-5 pt-16 text-center">
-        <p className="font-display text-4xl font-bold uppercase text-danger">No se pudo abrir</p>
+        <p className="font-display text-4xl font-bold uppercase text-danger">{t('league.openErr')}</p>
         <p className="mt-3 text-sm text-chalk-dim">{error}</p>
-        <Link to="/ligas" className="mt-6 text-sm font-semibold uppercase tracking-widest text-gold underline decoration-dotted">
-          Volver a mis ligas
+        <Link
+          to="/ligas"
+          className="mt-6 text-sm font-semibold uppercase tracking-widest text-gold underline decoration-dotted"
+        >
+          {t('league.backToLeagues')}
         </Link>
       </main>
     );
   }
   if (!detail) {
-    return <main className="flex min-h-[60dvh] items-center justify-center text-chalk-dim">Cargando la liga…</main>;
+    return (
+      <main className="flex min-h-[60dvh] items-center justify-center text-chalk-dim">
+        {t('league.loading')}
+      </main>
+    );
   }
   return <LeagueBody detail={detail} reload={load} />;
 }
 
 function LeagueBody({ detail, reload }: { detail: LeagueDetail; reload: () => Promise<void> }) {
   const user = useAuth((s) => s.user);
+  const { t } = useT();
   const isAdmin = user?.id === detail.adminUserId;
 
   return (
     <main className="mx-auto max-w-5xl px-5 pb-16 pt-10">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <Link to="/ligas" className="text-xs font-semibold uppercase tracking-[0.3em] text-chalk-dim hover:text-chalk">
-            ← Mis ligas
+          <Link
+            to="/ligas"
+            className="text-xs font-semibold uppercase tracking-[0.3em] text-chalk-dim hover:text-chalk"
+          >
+            {t('league.back')}
           </Link>
           <h1 className="mt-1 font-display text-6xl font-bold uppercase leading-none text-chalk">
             {detail.name}
           </h1>
         </div>
         <p className="tabular text-sm text-chalk-dim">
-          {detail.memberCount} {detail.memberCount === 1 ? 'miembro' : 'miembros'}
+          {detail.memberCount}{' '}
+          {detail.memberCount === 1 ? t('leagues.member') : t('leagues.members')}
         </p>
       </div>
 
@@ -86,11 +104,12 @@ function LeagueBody({ detail, reload }: { detail: LeagueDetail; reload: () => Pr
 /* ————— astas de la liga ————— */
 
 function Auctions({ detail, isAdmin }: { detail: LeagueDetail; isAdmin: boolean }) {
+  const { t, locale } = useT();
   const auctions = [...detail.auctions].sort((a, b) => b.createdAt - a.createdAt);
   const [latest, ...rest] = auctions;
 
   function fecha(ts: number): string {
-    return new Date(ts).toLocaleDateString('es-AR', {
+    return new Date(ts).toLocaleDateString(locale, {
       day: 'numeric',
       month: 'short',
       hour: '2-digit',
@@ -100,10 +119,13 @@ function Auctions({ detail, isAdmin }: { detail: LeagueDetail; isAdmin: boolean 
 
   return (
     <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
-      <h2 className="font-display text-2xl font-bold uppercase text-chalk">Astas de la liga</h2>
+      <h2 className="font-display text-2xl font-bold uppercase text-chalk">
+        {t('league.auctions')}
+      </h2>
       {!latest ? (
         <p className="mt-3 text-sm text-chalk-faint">
-          Todavía no hubo ninguna asta.{isAdmin ? ' Lanzá la primera acá abajo.' : ''}
+          {t('league.noAuctions')}
+          {isAdmin ? t('league.noAuctionsAdmin') : ''}
         </p>
       ) : (
         <>
@@ -111,7 +133,7 @@ function Auctions({ detail, isAdmin }: { detail: LeagueDetail; isAdmin: boolean 
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gold">
-                  Asta en curso
+                  {t('league.liveAuction')}
                 </p>
                 <p className="font-display text-4xl font-bold uppercase tracking-[0.2em] text-chalk">
                   {latest.roomCode}
@@ -123,20 +145,20 @@ function Auctions({ detail, isAdmin }: { detail: LeagueDetail; isAdmin: boolean 
                   to={`/sala/${latest.roomCode}`}
                   className="rounded-xl bg-gold px-5 py-2.5 font-display text-xl font-bold uppercase text-pitch-950"
                 >
-                  Entrar
+                  {t('league.enter')}
                 </Link>
                 <Link
                   to={`/tablero/${latest.roomCode}`}
                   className="rounded-xl border chalk-line px-4 py-2.5 font-display text-xl font-semibold uppercase text-chalk-dim hover:text-chalk"
                 >
-                  Tablero
+                  {t('league.board')}
                 </Link>
                 {isAdmin && (
                   <Link
                     to={`/admin/${latest.roomCode}`}
                     className="rounded-xl border chalk-line px-4 py-2.5 font-display text-xl font-semibold uppercase text-chalk-dim hover:text-chalk"
                   >
-                    Banditore
+                    {t('league.banditore')}
                   </Link>
                 )}
               </div>
@@ -151,11 +173,17 @@ function Auctions({ detail, isAdmin }: { detail: LeagueDetail; isAdmin: boolean 
                   </span>
                   <span className="text-xs text-chalk-faint">{fecha(a.createdAt)}</span>
                   <span className="flex gap-3">
-                    <Link to={`/sala/${a.roomCode}`} className="text-chalk-dim underline decoration-dotted hover:text-chalk">
-                      sala
+                    <Link
+                      to={`/sala/${a.roomCode}`}
+                      className="text-chalk-dim underline decoration-dotted hover:text-chalk"
+                    >
+                      {t('league.roomLink')}
                     </Link>
-                    <Link to={`/tablero/${a.roomCode}`} className="text-chalk-dim underline decoration-dotted hover:text-chalk">
-                      tablero
+                    <Link
+                      to={`/tablero/${a.roomCode}`}
+                      className="text-chalk-dim underline decoration-dotted hover:text-chalk"
+                    >
+                      {t('league.boardLink')}
                     </Link>
                   </span>
                 </li>
@@ -170,6 +198,7 @@ function Auctions({ detail, isAdmin }: { detail: LeagueDetail; isAdmin: boolean 
 
 function LaunchAuction({ detail }: { detail: LeagueDetail }) {
   const navigate = useNavigate();
+  const { t } = useT();
   const [error, setError] = useState<string | null>(null);
 
   async function launch(config: Partial<RoomConfig>) {
@@ -179,22 +208,20 @@ function LaunchAuction({ detail }: { detail: LeagueDetail }) {
       persist.setAdminToken(code, adminToken);
       navigate(`/admin/${code}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo lanzar el asta.');
+      setError(err instanceof Error ? err.message : t('league.launchErr'));
     }
   }
 
   return (
     <details className="rounded-2xl border-2 border-gold/40 bg-pitch-800/50 p-5">
       <summary className="cursor-pointer list-none font-display text-2xl font-bold uppercase text-gold [&::-webkit-details-marker]:hidden">
-        Lanzar asta ▾
+        {t('league.launchTitle')}
       </summary>
-      <p className="mb-4 mt-1 text-xs text-chalk-dim">
-        Crea una sala ligada a la liga: tus miembros entran con su cuenta, sin código ni nombre.
-      </p>
+      <p className="mb-4 mt-1 text-xs text-chalk-dim">{t('league.launchSubtitle')}</p>
       <AuctionConfigForm
         fixedLeagueName={detail.name}
-        submitLabel="Lanzar asta"
-        busyLabel="Lanzando…"
+        submitLabel={t('league.launch')}
+        busyLabel={t('league.launching')}
         onSubmit={launch}
         error={error}
       />
@@ -205,9 +232,12 @@ function LaunchAuction({ detail }: { detail: LeagueDetail }) {
 /* ————— miembros ————— */
 
 function Members({ detail }: { detail: LeagueDetail }) {
+  const { t } = useT();
   return (
     <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
-      <h2 className="font-display text-2xl font-bold uppercase text-chalk">Miembros</h2>
+      <h2 className="font-display text-2xl font-bold uppercase text-chalk">
+        {t('league.membersTitle')}
+      </h2>
       <ul className="mt-3 space-y-2">
         {detail.members.map((m) => (
           <li key={m.userId} className="flex items-center gap-3">
@@ -220,7 +250,7 @@ function Members({ detail }: { detail: LeagueDetail }) {
             </span>
             {m.userId === detail.adminUserId && (
               <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gold">
-                admin
+                {t('leagues.adminBadge')}
               </span>
             )}
           </li>
@@ -233,6 +263,7 @@ function Members({ detail }: { detail: LeagueDetail }) {
 /* ————— invitaciones (solo admin) ————— */
 
 function Invites({ detail, reload }: { detail: LeagueDetail; reload: () => Promise<void> }) {
+  const { t } = useT();
   const [raw, setRaw] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -240,9 +271,11 @@ function Invites({ detail, reload }: { detail: LeagueDetail; reload: () => Promi
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const emails = [...new Set(raw.split(/[\s,;]+/).map((s) => s.trim()).filter((s) => s.includes('@')))];
+    const emails = [
+      ...new Set(raw.split(/[\s,;]+/).map((s) => s.trim()).filter((s) => s.includes('@'))),
+    ];
     if (emails.length === 0) {
-      setError('Escribí al menos un email válido.');
+      setError(t('league.invitesErrEmpty'));
       return;
     }
     setBusy(true);
@@ -252,7 +285,7 @@ function Invites({ detail, reload }: { detail: LeagueDetail; reload: () => Promi
       setRaw('');
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudieron crear las invitaciones.');
+      setError(err instanceof Error ? err.message : t('league.invitesErr'));
     } finally {
       setBusy(false);
     }
@@ -260,17 +293,19 @@ function Invites({ detail, reload }: { detail: LeagueDetail; reload: () => Promi
 
   return (
     <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
-      <h2 className="font-display text-2xl font-bold uppercase text-chalk">Invitar amigos</h2>
+      <h2 className="font-display text-2xl font-bold uppercase text-chalk">
+        {t('league.invitesTitle')}
+      </h2>
       <form onSubmit={submit} className="mt-3">
         <label htmlFor="invite-emails" className={labelCls}>
-          Emails (separados por coma o enter)
+          {t('league.invitesLabel')}
         </label>
         <textarea
           id="invite-emails"
           value={raw}
           onChange={(e) => setRaw(e.target.value)}
           rows={3}
-          placeholder={'leo@ejemplo.com\nkun@ejemplo.com'}
+          placeholder={'leo@example.com\nkun@example.com'}
           className="w-full rounded-lg border chalk-line bg-pitch-900 px-3 py-2.5 text-sm text-chalk placeholder:text-chalk-faint focus:border-gold/60"
         />
         {error && <p className="mt-1 text-sm text-danger">{error}</p>}
@@ -279,7 +314,7 @@ function Invites({ detail, reload }: { detail: LeagueDetail; reload: () => Promi
           disabled={busy || !raw.trim()}
           className="mt-2 rounded-lg bg-gold px-4 py-2 font-display text-lg font-bold uppercase text-pitch-950 disabled:cursor-not-allowed disabled:bg-pitch-700 disabled:text-chalk-faint"
         >
-          {busy ? 'Invitando…' : 'Crear invitaciones'}
+          {busy ? t('league.inviting') : t('league.invitesSubmit')}
         </button>
       </form>
 
@@ -295,11 +330,10 @@ function Invites({ detail, reload }: { detail: LeagueDetail; reload: () => Promi
 }
 
 function InviteRow({ invite, leagueName }: { invite: InviteInfo; leagueName: string }) {
+  const { t } = useT();
   const [copied, setCopied] = useState(false);
   const accepted = invite.acceptedByUserId !== null;
-  const waText = encodeURIComponent(
-    `¡Sumate a nuestra liga "${leagueName}" en Fanta Asta! ${invite.url}`,
-  );
+  const waText = encodeURIComponent(t('league.waMessage', { league: leagueName, url: invite.url }));
 
   function copy() {
     navigator.clipboard
@@ -319,7 +353,7 @@ function InviteRow({ invite, leagueName }: { invite: InviteInfo; leagueName: str
           accepted ? 'bg-role-d/15 text-role-d' : 'bg-pitch-700 text-chalk-dim'
         }`}
       >
-        {accepted ? 'aceptada' : 'pendiente'}
+        {accepted ? t('league.accepted') : t('league.pending')}
       </span>
       {!accepted && (
         <>
@@ -328,7 +362,7 @@ function InviteRow({ invite, leagueName }: { invite: InviteInfo; leagueName: str
             onClick={copy}
             className="rounded border chalk-line px-2 py-1 text-xs font-semibold text-chalk-dim hover:text-chalk"
           >
-            {copied ? 'Copiado ✓' : 'Copiar link'}
+            {copied ? t('league.copied') : t('league.copyLink')}
           </button>
           <a
             href={`https://wa.me/?text=${waText}`}

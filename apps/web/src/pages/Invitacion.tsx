@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../authStore';
+import { useT } from '../i18n';
 import { acceptInvite, getInvite, type InvitePreview } from '../lib/leagueApi';
 import { inputCls, labelCls } from '../components/AuctionConfigForm';
 
@@ -8,6 +9,7 @@ type InviteState = 'loading' | 'invalid' | InvitePreview;
 
 export default function Invitacion() {
   const { token = '' } = useParams();
+  const { t } = useT();
   const [invite, setInvite] = useState<InviteState>('loading');
 
   useEffect(() => {
@@ -25,18 +27,24 @@ export default function Invitacion() {
   }, [token]);
 
   if (invite === 'loading') {
-    return <main className="flex min-h-[60dvh] items-center justify-center text-chalk-dim">Revisando la invitación…</main>;
+    return (
+      <main className="flex min-h-[60dvh] items-center justify-center text-chalk-dim">
+        {t('invite.checking')}
+      </main>
+    );
   }
   if (invite === 'invalid') {
     return (
       <main className="mx-auto flex max-w-md flex-col items-center px-5 pt-16 text-center">
-        <p className="font-display text-5xl font-bold uppercase text-chalk-dim">Invitación vencida</p>
-        <p className="mt-3 text-sm text-chalk-dim">
-          Este link de invitación no existe o ya no es válido. Pedile al admin de la liga que te
-          mande uno nuevo.
+        <p className="font-display text-5xl font-bold uppercase text-chalk-dim">
+          {t('invite.expiredTitle')}
         </p>
-        <Link to="/" className="mt-6 rounded-lg border chalk-line px-5 py-2.5 text-sm font-semibold uppercase tracking-widest text-chalk-dim hover:text-chalk">
-          Volver al inicio
+        <p className="mt-3 text-sm text-chalk-dim">{t('invite.expiredText')}</p>
+        <Link
+          to="/"
+          className="mt-6 rounded-lg border chalk-line px-5 py-2.5 text-sm font-semibold uppercase tracking-widest text-chalk-dim hover:text-chalk"
+        >
+          {t('invite.backHome')}
         </Link>
       </main>
     );
@@ -46,14 +54,17 @@ export default function Invitacion() {
 
 function InviteBody({ token, invite }: { token: string; invite: InvitePreview }) {
   const status = useAuth((s) => s.status);
+  const { t } = useT();
   return (
     <main className="mx-auto flex max-w-md flex-col px-5 pb-16 pt-10 sm:pt-16">
-      <p className="text-sm font-semibold uppercase tracking-[0.3em] text-gold">Invitación</p>
+      <p className="text-sm font-semibold uppercase tracking-[0.3em] text-gold">
+        {t('invite.eyebrow')}
+      </p>
       <h1 className="mt-2 font-display text-5xl font-bold uppercase leading-none text-chalk">
-        Te invitaron a <span className="text-gold">{invite.leagueName}</span>
+        {t('invite.title')} <span className="text-gold">{invite.leagueName}</span>
       </h1>
       {status === 'loading' ? (
-        <p className="mt-8 text-chalk-dim">Un momento…</p>
+        <p className="mt-8 text-chalk-dim">{t('invite.loading')}</p>
       ) : status === 'authed' ? (
         <AcceptPanel token={token} alreadyMember={invite.alreadyMember} />
       ) : (
@@ -66,6 +77,7 @@ function InviteBody({ token, invite }: { token: string; invite: InvitePreview })
 function AcceptPanel({ token, alreadyMember }: { token: string; alreadyMember: boolean }) {
   const navigate = useNavigate();
   const refresh = useAuth((s) => s.refresh);
+  const { t } = useT();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -77,7 +89,7 @@ function AcceptPanel({ token, alreadyMember }: { token: string; alreadyMember: b
       await refresh();
       navigate(`/liga/${leagueId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo aceptar la invitación.');
+      setError(err instanceof Error ? err.message : t('invite.acceptErr'));
     } finally {
       setBusy(false);
     }
@@ -85,9 +97,7 @@ function AcceptPanel({ token, alreadyMember }: { token: string; alreadyMember: b
 
   return (
     <div className="mt-8">
-      {alreadyMember && (
-        <p className="mb-3 text-sm text-chalk-dim">Parece que ya sos parte de esta liga.</p>
-      )}
+      {alreadyMember && <p className="mb-3 text-sm text-chalk-dim">{t('invite.alreadyMember')}</p>}
       {error && <p className="mb-3 text-sm font-semibold text-danger">{error}</p>}
       <button
         type="button"
@@ -95,10 +105,13 @@ function AcceptPanel({ token, alreadyMember }: { token: string; alreadyMember: b
         disabled={busy}
         className="w-full rounded-xl bg-gold py-4 font-display text-2xl font-bold uppercase tracking-wider text-pitch-950 transition active:scale-[0.98] disabled:opacity-50"
       >
-        {busy ? 'Uniéndote…' : alreadyMember ? 'Ir a la liga' : 'Unirme a la liga'}
+        {busy ? t('invite.joining') : alreadyMember ? t('invite.goLeague') : t('invite.join')}
       </button>
-      <Link to="/ligas" className="mt-4 block text-center text-sm text-chalk-dim underline decoration-dotted hover:text-chalk">
-        Ver mis ligas
+      <Link
+        to="/ligas"
+        className="mt-4 block text-center text-sm text-chalk-dim underline decoration-dotted hover:text-chalk"
+      >
+        {t('invite.seeLeagues')}
       </Link>
     </div>
   );
@@ -109,6 +122,7 @@ function RegisterPanel({ token, presetEmail }: { token: string; presetEmail: str
   const navigate = useNavigate();
   const register = useAuth((s) => s.register);
   const refresh = useAuth((s) => s.refresh);
+  const { t } = useT();
   const [email, setEmail] = useState(presetEmail);
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -128,7 +142,7 @@ function RegisterPanel({ token, presetEmail }: { token: string; presetEmail: str
       await refresh();
       navigate(`/liga/${leagueId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear la cuenta.');
+      setError(err instanceof Error ? err.message : t('invite.registerErr'));
     } finally {
       setBusy(false);
     }
@@ -136,10 +150,10 @@ function RegisterPanel({ token, presetEmail }: { token: string; presetEmail: str
 
   return (
     <form onSubmit={submit} className="mt-8 space-y-4">
-      <p className="text-sm text-chalk-dim">Creá tu cuenta para unirte a la liga.</p>
+      <p className="text-sm text-chalk-dim">{t('invite.registerIntro')}</p>
       <div>
         <label htmlFor="inv-email" className={labelCls}>
-          Email
+          {t('auth.email')}
         </label>
         <input
           id="inv-email"
@@ -151,20 +165,20 @@ function RegisterPanel({ token, presetEmail }: { token: string; presetEmail: str
       </div>
       <div>
         <label htmlFor="inv-name" className={labelCls}>
-          Nombre de tu equipo
+          {t('auth.teamName')}
         </label>
         <input
           id="inv-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ej: La Scaloneta"
+          placeholder={t('home.join.namePh')}
           maxLength={24}
           className={inputCls}
         />
       </div>
       <div>
         <label htmlFor="inv-password" className={labelCls}>
-          Contraseña <span className="normal-case">(mínimo 6)</span>
+          {t('auth.password')} <span className="normal-case">{t('auth.passwordMin')}</span>
         </label>
         <input
           id="inv-password"
@@ -185,15 +199,15 @@ function RegisterPanel({ token, presetEmail }: { token: string; presetEmail: str
         disabled={busy || !valid}
         className="w-full rounded-xl bg-gold py-4 font-display text-2xl font-bold uppercase tracking-wider text-pitch-950 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-pitch-700 disabled:text-chalk-faint"
       >
-        {busy ? 'Creando cuenta…' : 'Crear cuenta y unirme'}
+        {busy ? t('invite.creating') : t('invite.registerSubmit')}
       </button>
       <p className="text-center text-sm text-chalk-dim">
-        ¿Ya tenés cuenta?{' '}
+        {t('invite.haveAccount')}{' '}
         <Link
           to={`/entrar?next=${encodeURIComponent(`/invitacion/${token}`)}`}
           className="font-semibold text-gold underline decoration-dotted"
         >
-          Entrá acá
+          {t('invite.loginHere')}
         </Link>
       </p>
     </form>

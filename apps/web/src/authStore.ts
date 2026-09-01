@@ -18,6 +18,34 @@ export async function serverError(res: Response): Promise<string> {
   return `Error ${res.status}`;
 }
 
+/** Error de auth con flags del server: 409 {needsPassword} en claim, 401 {passwordless} en login. */
+export class AuthFlowError extends Error {
+  constructor(
+    message: string,
+    readonly flags: { needsPassword?: boolean; passwordless?: boolean } = {},
+  ) {
+    super(message);
+    this.name = 'AuthFlowError';
+  }
+}
+
+async function authFail(res: Response): Promise<never> {
+  let message = `Error ${res.status}`;
+  const flags: { needsPassword?: boolean; passwordless?: boolean } = {};
+  try {
+    const body: unknown = await res.json();
+    if (body && typeof body === 'object') {
+      const b = body as Record<string, unknown>;
+      if (typeof b.error === 'string') message = b.error;
+      if (b.needsPassword === true) flags.needsPassword = true;
+      if (b.passwordless === true) flags.passwordless = true;
+    }
+  } catch {
+    /* cuerpo no-JSON */
+  }
+  throw new AuthFlowError(message, flags);
+}
+
 export interface AuthState {
   status: AuthStatus;
   user: User | null;
@@ -28,6 +56,11 @@ export interface AuthState {
   refresh: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, name: string, password: string) => Promise<void>;
+  /** Passwordless-lite: encuentra o crea la cuenta por email sin contraseña y abre sesión.
+   *  Lanza AuthFlowError {needsPassword} si el email está protegido con contraseña. */
+  claim: (email: string, name?: string) => Promise<void>;
+  /** Protege la cuenta logueada (setea/cambia contraseña, ≥6). */
+  setPassword: (password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -71,7 +104,7 @@ export const useAuth = create<AuthState>()((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    if (!res.ok) throw new Error(await serverError(res));
+    if (!res.ok) await authFail(res);
     const { user } = (await res.json()) as { user: User };
     set({ status: 'authed', user });
     await get().refresh();
@@ -88,6 +121,29 @@ export const useAuth = create<AuthState>()((set, get) => ({
     const { user } = (await res.json()) as { user: User };
     set({ status: 'authed', user });
     await get().refresh();
+  },
+
+  claim: async (email, name) => {
+    const res = await fetch('/api/auth/claim', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(name ? { email, name } : { email }),
+    });
+    if (!res.ok) await authFail(res);
+    const { user } = (await res.json()) as { user: User };
+    set({ status: 'authed', user });
+    await get().refresh();
+  },
+
+  setPassword: async (password) => {
+    const res = await fetch('/api/auth/set-password', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) throw new Error(await serverError(res));
   },
 
   logout: async () => {

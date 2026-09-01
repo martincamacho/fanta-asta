@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { DEFAULT_CONFIG, ROLES, ROLE_NAMES, type Role, type RoomConfig } from '@fanta/shared';
+import { DEFAULT_CONFIG, ROLES, type Role, type RoomConfig } from '@fanta/shared';
+import { useT, type TFunc } from '../i18n';
 
 export const inputCls =
   'w-full rounded-lg border chalk-line bg-pitch-900 px-3 py-2.5 text-chalk placeholder:text-chalk-faint focus:border-gold/60';
@@ -7,23 +8,24 @@ export const labelCls = 'mb-1 block text-xs font-semibold uppercase tracking-wid
 
 /** Validación de cupos flexibles: min≤max por rol y sum(min) ≤ total ≤ sum(max). */
 export function flexSlotsError(
+  t: TFunc,
   slots: Record<Role, number>,
   slotsMin: Record<Role, number>,
   rosterSize: number,
 ): string | null {
   for (const role of ROLES) {
     if (slotsMin[role] > slots[role]) {
-      return `El mínimo de ${ROLE_NAMES[role].toLowerCase()}s (${slotsMin[role]}) supera el máximo (${slots[role]}).`;
+      return t('cfg.flexErrMinMax', {
+        role: t(`role.${role}`),
+        min: slotsMin[role],
+        max: slots[role],
+      });
     }
   }
   const sumMin = ROLES.reduce((n, r) => n + slotsMin[r], 0);
   const sumMax = ROLES.reduce((n, r) => n + slots[r], 0);
-  if (rosterSize < sumMin) {
-    return `El total de plantilla (${rosterSize}) no llega a la suma de mínimos (${sumMin}).`;
-  }
-  if (rosterSize > sumMax) {
-    return `El total de plantilla (${rosterSize}) supera la suma de máximos (${sumMax}).`;
-  }
+  if (rosterSize < sumMin) return t('cfg.flexErrTotalLow', { total: rosterSize, sum: sumMin });
+  if (rosterSize > sumMax) return t('cfg.flexErrTotalHigh', { total: rosterSize, sum: sumMax });
   return null;
 }
 
@@ -44,6 +46,7 @@ export function AuctionConfigForm({
   onSubmit: (config: Partial<RoomConfig>) => Promise<void>;
   error?: string | null;
 }) {
+  const { t } = useT();
   const [leagueName, setLeagueName] = useState('');
   const [budget, setBudget] = useState(DEFAULT_CONFIG.budget);
   const [slots, setSlots] = useState<Record<Role, number>>({ ...DEFAULT_CONFIG.slots });
@@ -63,7 +66,7 @@ export function AuctionConfigForm({
   );
   const [busy, setBusy] = useState(false);
 
-  const flexError = flexOn ? flexSlotsError(slots, slotsMin, rosterSize) : null;
+  const flexError = flexOn ? flexSlotsError(t, slots, slotsMin, rosterSize) : null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -91,7 +94,7 @@ export function AuctionConfigForm({
       {showLeagueName && !fixedLeagueName && (
         <div className="mb-4">
           <label htmlFor="cfg-league" className={labelCls}>
-            Nombre de la liga
+            {t('cfg.leagueName')}
           </label>
           <input
             id="cfg-league"
@@ -106,7 +109,7 @@ export function AuctionConfigForm({
       <div className="mb-4 grid grid-cols-2 gap-3">
         <div>
           <label htmlFor="cfg-budget" className={labelCls}>
-            Créditos
+            {t('cfg.credits')}
           </label>
           <input
             id="cfg-budget"
@@ -119,7 +122,7 @@ export function AuctionConfigForm({
         </div>
         <div>
           <label htmlFor="cfg-timer" className={labelCls}>
-            Timer de puja (s)
+            {t('cfg.bidTimer')}
           </label>
           <input
             id="cfg-timer"
@@ -132,14 +135,14 @@ export function AuctionConfigForm({
         </div>
       </div>
       <fieldset className="mb-5">
-        <legend className={labelCls}>Cupos por rol</legend>
+        <legend className={labelCls}>{t('cfg.slotsByRole')}</legend>
         <div className="grid grid-cols-4 gap-2">
           {ROLES.map((role) => (
             <div key={role}>
               <label
                 htmlFor={`cfg-slots-${role}`}
                 className="mb-1 block text-center font-display text-lg font-bold text-chalk-dim"
-                title={ROLE_NAMES[role]}
+                title={t(`role.${role}`)}
               >
                 {role}
               </label>
@@ -160,7 +163,7 @@ export function AuctionConfigForm({
       <div className="mb-5 flex flex-wrap items-end gap-x-5 gap-y-3">
         <div>
           <label htmlFor="cfg-base" className={labelCls}>
-            Base de puja
+            {t('cfg.baseBid')}
           </label>
           <select
             id="cfg-base"
@@ -168,13 +171,13 @@ export function AuctionConfigForm({
             onChange={(e) => setBaseBidMode(e.target.value as RoomConfig['baseBidMode'])}
             className={inputCls}
           >
-            <option value="fixed">Desde 1 crédito</option>
-            <option value="quotazione">Desde la quotazione</option>
+            <option value="fixed">{t('cfg.baseFixed')}</option>
+            <option value="quotazione">{t('cfg.baseQuota')}</option>
           </select>
         </div>
         <div>
           <label htmlFor="cfg-callmode" className={labelCls}>
-            ¿Quién llama?
+            {t('cfg.whoCalls')}
           </label>
           <select
             id="cfg-callmode"
@@ -182,13 +185,13 @@ export function AuctionConfigForm({
             onChange={(e) => setCallMode(e.target.value as RoomConfig['callMode'])}
             className={inputCls}
           >
-            <option value="admin">El banditore</option>
-            <option value="turns">Ronda de turnos</option>
+            <option value="admin">{t('cfg.callAdmin')}</option>
+            <option value="turns">{t('cfg.callTurns')}</option>
           </select>
         </div>
         <div>
           <label htmlFor="cfg-auctionmode" className={labelCls}>
-            Modo de oferta
+            {t('cfg.offerMode')}
           </label>
           <select
             id="cfg-auctionmode"
@@ -196,8 +199,8 @@ export function AuctionConfigForm({
             onChange={(e) => setAuctionMode(e.target.value as RoomConfig['auctionMode'])}
             className={inputCls}
           >
-            <option value="uno">+Uno (digital)</option>
-            <option value="premi_parla">Premi&amp;Parla (se canta de viva voz)</option>
+            <option value="uno">{t('cfg.modeUno')}</option>
+            <option value="premi_parla">{t('cfg.modePremi')}</option>
           </select>
         </div>
         <label className="flex items-center gap-2 pb-2.5 text-sm text-chalk">
@@ -207,18 +210,16 @@ export function AuctionConfigForm({
             onChange={(e) => setHideValues(e.target.checked)}
             className="h-4 w-4 accent-gold"
           />
-          Ocultar quotazioni
+          {t('cfg.hideValues')}
         </label>
       </div>
       <p className="-mt-3 mb-4 text-xs text-chalk-faint">
-        {auctionMode === 'uno'
-          ? 'Cada pulsación lleva su monto: todo se resuelve en el celular.'
-          : 'El botón solo reserva la palabra; la oferta se canta de viva voz y el banditore fija el monto.'}
+        {auctionMode === 'uno' ? t('cfg.modeUnoHint') : t('cfg.modePremiHint')}
       </p>
 
       <details className="mb-5 rounded-lg border chalk-line px-3 py-2" open={flexOn}>
         <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-widest text-chalk-dim [&::-webkit-details-marker]:hidden">
-          Cupos flexibles (avanzado) ▾
+          {t('cfg.flexTitle')}
         </summary>
         <label className="mt-2 flex items-center gap-2 text-sm text-chalk">
           <input
@@ -227,12 +228,12 @@ export function AuctionConfigForm({
             onChange={(e) => setFlexOn(e.target.checked)}
             className="h-4 w-4 accent-gold"
           />
-          Usar mínimos y máximos por rol (estilo oficial)
+          {t('cfg.flexToggle')}
         </label>
         {flexOn && (
           <div className="mt-3">
             <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-              Mínimo por rol (el máximo es el cupo de arriba)
+              {t('cfg.flexMinLabel')}
             </p>
             <div className="grid grid-cols-4 gap-2">
               {ROLES.map((role) => (
@@ -247,13 +248,13 @@ export function AuctionConfigForm({
                       [role]: Math.max(0, Math.floor(Number(e.target.value)) || 0),
                     }))
                   }
-                  aria-label={`Mínimo de ${ROLE_NAMES[role]}`}
+                  aria-label={t('cfg.flexMinAria', { role: t(`role.${role}`) })}
                   className={`${inputCls} tabular py-1.5 text-center`}
                 />
               ))}
             </div>
             <label className="mt-3 block">
-              <span className={labelCls}>Total de plantilla</span>
+              <span className={labelCls}>{t('cfg.flexTotal')}</span>
               <input
                 type="number"
                 min={1}

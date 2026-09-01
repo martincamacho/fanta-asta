@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  BID_REJECT_MESSAGES,
   ROLES,
-  ROLE_NAMES,
   budgetRemaining,
   maxBid,
   nextMinBid,
@@ -13,7 +11,8 @@ import {
   type RoomState,
 } from '@fanta/shared';
 import { useStore } from '../store';
-import { useAuth } from '../authStore';
+import { AuthFlowError, useAuth } from '../authStore';
+import { errorText, useT, type MessageKey, type TFunc } from '../i18n';
 import { actions, joinRoom, leaveRoom } from '../lib/socket';
 import { loadPlayers } from '../lib/api';
 import { getRoomTicket } from '../lib/leagueApi';
@@ -29,6 +28,7 @@ import { currentBid, currentCallerId, normalize, participantName } from '../lib/
 import { PlayerImg } from '../components/PlayerImg';
 import { RoleBadge, ROLE_STYLES } from '../components/RoleBadge';
 import { NotLeagueMember, RoomMissing } from '../components/RoomMissing';
+import { LangSwitcher } from '../components/LangSwitcher';
 import { SoundToggle } from '../components/SoundToggle';
 import { StatBadges } from '../components/StatBadges';
 
@@ -42,6 +42,7 @@ type Identity =
 export default function Buzzer() {
   const { code = '' } = useParams();
   const guard = useRoomGuard(code);
+  const { t } = useT();
   useWakeLock(); // el celular es el pulsador: la pantalla no se apaga
   const authStatus = useAuth((s) => s.status);
   const [name, setName] = useState(() => persist.getName(code) ?? '');
@@ -76,7 +77,6 @@ export default function Buzzer() {
       })
       .catch(() => {
         if (!alive) return;
-        // Sin red hacia el endpoint: si hay ticket guardado de esta sala, sirve para reconectar.
         const saved = persist.getTicket(code);
         setIdentity(saved ? { kind: 'ticket', ticket: saved } : { kind: 'anon' });
       });
@@ -107,11 +107,11 @@ export default function Buzzer() {
     }
   }, [guard.status, identity, name, joined, code]);
 
-  if (guard.status === 'checking') return <CenterMsg>Buscando la sala…</CenterMsg>;
+  if (guard.status === 'checking') return <CenterMsg>{t('buzzer.searching')}</CenterMsg>;
   if (guard.status === 'missing') return <RoomMissing code={code} />;
   if (identity.kind === 'forbidden') return <NotLeagueMember leagueName={guard.leagueName} />;
-  if (identity.kind === 'resolving') return <CenterMsg>Preparando tu asiento…</CenterMsg>;
-  if (identity.kind === 'anon' && !name) return <NameGate code={code} onReady={setName} />;
+  if (identity.kind === 'resolving') return <CenterMsg>{t('buzzer.preparingSeat')}</CenterMsg>;
+  if (identity.kind === 'anon' && !name) return <AccessGate code={code} onAnonReady={setName} />;
   return <BuzzerLive code={code} leagueName={guard.leagueName} />;
 }
 
@@ -123,40 +123,150 @@ function CenterMsg({ children }: { children: ReactNode }) {
   );
 }
 
-/** Pide el nombre de equipo si se entró por link directo, sin pasar por el home. */
-function NameGate({ code, onReady }: { code: string; onReady: (name: string) => void }) {
-  const [value, setValue] = useState('');
-  function submit(e: FormEvent) {
+/** Gate unificado al entrar por link directo: email + equipo (claim passwordless-lite),
+ *  con paso de contraseña si la cuenta está protegida, o flujo anónimo (solo nombre). */
+function AccessGate({ code, onAnonReady }: { code: string; onAnonReady: (name: string) => void }) {
+  const { t } = useT();
+  const claim = useAuth((s) => s.claim);
+  const login = useAuth((s) => s.login);
+  const [mode, setMode] = useState<'email' | 'anon'>('email');
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const inputCls =
+    'w-full rounded-lg border chalk-line bg-pitch-900 px-4 py-3 text-lg text-chalk placeholder:text-chalk-faint';
+
+  const valid =
+    mode === 'anon'
+      ? name.trim().length > 0
+      : email.includes('@') && name.trim().length > 0 && (!needsPassword || password.length >= 6);
+
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    const clean = value.trim();
-    if (!clean) return;
-    persist.setName(code, clean);
-    onReady(clean);
+    if (!valid) return;
+    if (mode === 'anon') {
+      persist.setName(code, name.trim());
+      onAnonReady(name.trim());
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      if (needsPassword) await login(email.trim(), password);
+      else await claim(email.trim(), name.trim());
+      // Con sesión, el Buzzer resuelve el ticket y entra solo.
+    } catch (err) {
+      if (err instanceof AuthFlowError && err.flags.needsPassword) {
+        setNeedsPassword(true);
+      } else {
+        setError(err instanceof Error ? err.message : t('auth.fallbackError'));
+      }
+    } finally {
+      setBusy(false);
+    }
   }
+
   return (
     <div className="pitch-bg flex min-h-dvh flex-col justify-center px-6">
       <form onSubmit={submit} className="mx-auto w-full max-w-sm">
         <p className="text-sm font-semibold uppercase tracking-[0.3em] text-gold">
-          Sala {code.toUpperCase()}
+          {t('buzzer.room', { code: code.toUpperCase() })}
         </p>
-        <h1 className="mb-6 mt-1 font-display text-5xl font-bold uppercase text-chalk">
-          ¿Cómo se llama tu equipo?
+        <h1 className="mb-2 mt-1 font-display text-5xl font-bold uppercase text-chalk">
+          {t('buzzer.nameQuestion')}
         </h1>
-        <input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Nombre de equipo"
-          maxLength={24}
-          autoFocus
-          className="w-full rounded-lg border chalk-line bg-pitch-900 px-4 py-3 text-lg text-chalk placeholder:text-chalk-faint"
-        />
+        {mode === 'email' ? (
+          <>
+            <p className="mb-5 text-sm text-chalk-dim">{t('gate.emailIntro')}</p>
+            <input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setNeedsPassword(false);
+              }}
+              placeholder={t('auth.emailPh')}
+              className={inputCls}
+            />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t('buzzer.namePh')}
+              maxLength={24}
+              className={`${inputCls} mt-3`}
+            />
+            {needsPassword && (
+              <div className="animate-rise mt-3">
+                <p className="mb-2 text-sm font-semibold text-gold">{t('gate.protected')}</p>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  autoFocus
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t('auth.password')}
+                  className={inputCls}
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="mt-4">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t('buzzer.namePh')}
+              maxLength={24}
+              autoFocus
+              className={inputCls}
+            />
+          </div>
+        )}
+        {error && (
+          <p role="alert" className="mt-3 text-sm font-semibold text-danger">
+            {error}
+          </p>
+        )}
         <button
           type="submit"
-          disabled={!value.trim()}
+          disabled={busy || !valid}
           className="mt-4 w-full rounded-xl bg-primary py-4 font-display text-2xl font-bold uppercase tracking-wider text-white disabled:bg-pitch-700 disabled:text-chalk-faint"
         >
-          Entrar
+          {busy ? t('auth.busy') : t('buzzer.enter')}
         </button>
+        <div className="mt-4 text-center text-sm">
+          {mode === 'email' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('anon');
+                  setError(null);
+                }}
+                className="font-semibold text-chalk-dim underline decoration-dotted hover:text-chalk"
+              >
+                {t('gate.continueNoAccount')}
+              </button>
+              <p className="mt-1 text-xs text-chalk-faint">{t('gate.noAccountNote')}</p>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setMode('email');
+                setError(null);
+              }}
+              className="font-semibold text-gold underline decoration-dotted"
+            >
+              {t('gate.useEmail')}
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );
@@ -167,6 +277,7 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
   const selfId = useStore((s) => s.selfId);
   const players = useStore((s) => s.players);
   const joinError = useStore((s) => s.joinError);
+  const { t } = useT();
   const soundPref = useSoundPref('buzzer');
   useAuctionSounds(state, soundPref.enabled);
 
@@ -174,13 +285,15 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
     return (
       <CenterMsg>
         <div>
-          <p className="mb-2 font-display text-3xl font-bold uppercase text-danger">No pudiste entrar</p>
+          <p className="mb-2 font-display text-3xl font-bold uppercase text-danger">
+            {t('buzzer.joinErrTitle')}
+          </p>
           <p>{joinError}</p>
         </div>
       </CenterMsg>
     );
   }
-  if (!state) return <CenterMsg>Conectando a la sala…</CenterMsg>;
+  if (!state) return <CenterMsg>{t('buzzer.connecting')}</CenterMsg>;
 
   const me = state.participants.find((p) => p.id === selfId);
   if (selfId && !me) {
@@ -188,14 +301,14 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
       <CenterMsg>
         <div>
           <p className="mb-2 font-display text-3xl font-bold uppercase text-danger">
-            Fuiste expulsado de la sala
+            {t('buzzer.kickedTitle')}
           </p>
-          <p>Hablá con el banditore si fue un error.</p>
+          <p>{t('buzzer.kickedText')}</p>
         </div>
       </CenterMsg>
     );
   }
-  if (!me) return <CenterMsg>Reclamando tu asiento…</CenterMsg>;
+  if (!me) return <CenterMsg>{t('buzzer.claimingSeat')}</CenterMsg>;
 
   const player = state.auction.playerId !== null ? players.get(state.auction.playerId) : undefined;
 
@@ -240,6 +353,7 @@ function TopBar({
   onToggleSound: () => void;
 }) {
   const connection = useStore((s) => s.connection);
+  const { t } = useT();
   const me = state.participants.find((p) => p.id === meId);
   const credits = me ? budgetRemaining(me, state.config) : 0;
   return (
@@ -249,16 +363,17 @@ function TopBar({
           className={`h-2 w-2 shrink-0 rounded-full ${
             connection === 'connected' ? 'bg-success' : 'bg-danger animate-pulse-danger'
           }`}
-          aria-label={connection === 'connected' ? 'Conectado' : 'Sin conexión'}
+          aria-label={connection === 'connected' ? t('conn.connected') : t('conn.offline')}
         />
         <span className="truncate text-sm text-chalk-dim">
           {leagueName && leagueName !== state.config.leagueName
-            ? `Liga: ${leagueName}`
+            ? t('buzzer.league', { name: leagueName })
             : state.config.leagueName}{' '}
           · <span className="tracking-widest">{code.toUpperCase()}</span>
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <LangSwitcher compact />
         <SoundToggle enabled={soundEnabled} onToggle={onToggleSound} />
         <span className="tabular rounded-md bg-pitch-800 px-2.5 py-1 font-display text-xl font-bold text-gold">
           {credits} cr
@@ -271,6 +386,7 @@ function TopBar({
 /* ————— idle ————— */
 
 function IdleBody({ state, meId }: { state: RoomState; meId: string }) {
+  const { t } = useT();
   const callerId = currentCallerId(state);
   const myTurn = callerId !== null && callerId === meId;
 
@@ -289,23 +405,19 @@ function IdleBody({ state, meId }: { state: RoomState; meId: string }) {
           {callerId ? (
             <>
               <p className="font-display text-3xl font-bold uppercase text-chalk-dim">
-                Turno de llamada
+                {t('buzzer.turnOf')}
               </p>
               <p className="font-display text-4xl font-bold uppercase text-gold">
                 {participantName(state, callerId)}
               </p>
-              <p className="max-w-xs text-sm text-chalk-faint">
-                Está eligiendo qué jugador sale a subasta.
-              </p>
+              <p className="max-w-xs text-sm text-chalk-faint">{t('buzzer.turnPicking')}</p>
             </>
           ) : (
             <>
               <p className="font-display text-3xl font-bold uppercase text-chalk-dim">
-                Esperando la próxima llamada
+                {t('buzzer.waitingCall')}
               </p>
-              <p className="max-w-xs text-sm text-chalk-faint">
-                El banditore todavía no llamó a ningún jugador. Mantené el dedo listo.
-              </p>
+              <p className="max-w-xs text-sm text-chalk-faint">{t('buzzer.waitingText')}</p>
             </>
           )}
         </div>
@@ -318,6 +430,7 @@ function IdleBody({ state, meId }: { state: RoomState; meId: string }) {
 /** Modo 'turns' y me toca: elijo qué jugador sale a subasta desde el celular. */
 function TurnPicker({ state }: { state: RoomState }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<Player | null>(null);
 
@@ -338,18 +451,16 @@ function TurnPicker({ state }: { state: RoomState }) {
   return (
     <div className="flex flex-1 flex-col">
       <p className="animate-rise text-center font-display text-4xl font-bold uppercase text-gold">
-        ¡Te toca llamar!
+        {t('buzzer.yourTurn')}
       </p>
-      <p className="mb-3 mt-1 text-center text-sm text-chalk-dim">
-        Elegí qué jugador sale a subasta.
-      </p>
+      <p className="mb-3 mt-1 text-center text-sm text-chalk-dim">{t('buzzer.yourTurnText')}</p>
       <input
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
           setPicked(null);
         }}
-        placeholder="Buscar jugador o equipo…"
+        placeholder={t('buzzer.searchPh')}
         className="w-full rounded-lg border chalk-line bg-pitch-900 px-4 py-3 text-chalk placeholder:text-chalk-faint"
       />
       {picked ? (
@@ -362,13 +473,18 @@ function TurnPicker({ state }: { state: RoomState }) {
               </p>
               <p className="text-xs text-chalk-dim">
                 {picked.team}
-                {!state.config.hideValues && <> · quot. {picked.quotazione}</>}
+                {!state.config.hideValues && (
+                  <>
+                    {' '}
+                    · {t('buzzer.quot')} {picked.quotazione}
+                  </>
+                )}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setPicked(null)}
-              aria-label="Descartar"
+              aria-label={t('buzzer.dismiss')}
               className="rounded px-2 text-chalk-faint"
             >
               ✕
@@ -382,7 +498,7 @@ function TurnPicker({ state }: { state: RoomState }) {
             }}
             className="mt-3 w-full rounded-xl bg-primary py-3.5 font-display text-2xl font-bold uppercase tracking-wider text-white active:scale-[0.98]"
           >
-            Llamar a subasta
+            {t('buzzer.callToAuction')}
           </button>
         </div>
       ) : (
@@ -408,7 +524,7 @@ function TurnPicker({ state }: { state: RoomState }) {
             </li>
           ))}
           {results.length === 0 && (
-            <li className="py-6 text-center text-sm text-chalk-faint">Sin resultados.</li>
+            <li className="py-6 text-center text-sm text-chalk-faint">{t('buzzer.noResults')}</li>
           )}
         </ul>
       )}
@@ -418,11 +534,21 @@ function TurnPicker({ state }: { state: RoomState }) {
 
 /* ————— subasta ————— */
 
+function rejectTitle(t: TFunc, reason: string): string {
+  const key = `bidTitle.${reason}` as MessageKey;
+  try {
+    return t(key);
+  } catch {
+    return t('bidTitle.fallback');
+  }
+}
+
 function AuctionBody({ state, player, meId }: { state: RoomState; player: Player; meId: string }) {
   const players = useStore((s) => s.players);
   const eventSeq = useStore((s) => s.eventSeq);
   const errorSeq = useStore((s) => s.errorSeq);
   const lastError = useStore((s) => s.lastError);
+  const { t } = useT();
   const [customOpen, setCustomOpen] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
   const [shake, setShake] = useState(0);
@@ -439,14 +565,14 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
   /** Premi&Parla: el botón solo reserva la palabra; el monto se canta de viva voz. */
   const premi = state.config.auctionMode === 'premi_parla';
 
-  // room:error → toast + sacudida del botón
+  // room:error → toast localizado por código + sacudida del botón
   useEffect(() => {
     if (errorSeq === 0 || !lastError) return;
-    setToast(lastError.message);
+    setToast(errorText(t, lastError));
     setShake((s) => s + 1);
-    const t = setTimeout(() => setToast(null), 2500);
-    return () => clearTimeout(t);
-  }, [errorSeq, lastError]);
+    const timer = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [errorSeq, lastError, t]);
 
   function fire(amount?: number) {
     navigator.vibrate?.(30);
@@ -483,7 +609,7 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
               {!state.config.hideValues && (
                 <>
                   {' '}
-                  · quot. <span className="tabular">{player.quotazione}</span>
+                  · {t('buzzer.quot')} <span className="tabular">{player.quotazione}</span>
                 </>
               )}
             </p>
@@ -499,14 +625,14 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
         <div className="mt-4 flex items-end justify-between gap-3 rounded-xl border chalk-line bg-pitch-800/70 px-4 py-3">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-              {premi ? 'Palabra' : 'Oferta vigente'}
+              {premi ? t('buzzer.word') : t('buzzer.currentBid')}
             </p>
             {bid ? (
               <p className="truncate text-sm text-chalk">
-                {iAmWinning ? 'Tuya' : participantName(state, bid.participantId)}
+                {iAmWinning ? t('buzzer.yourBid') : participantName(state, bid.participantId)}
               </p>
             ) : (
-              <p className="text-sm text-chalk-faint">Sin ofertas todavía</p>
+              <p className="text-sm text-chalk-faint">{t('buzzer.noBidsYet')}</p>
             )}
           </div>
           <span
@@ -544,41 +670,41 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
             premi ? (
               <>
                 <span className="font-display text-[clamp(2.6rem,10vw,4rem)] font-bold uppercase leading-tight tracking-wide">
-                  Pedir la palabra
+                  {t('buzzer.bookWord')}
                 </span>
                 <span className="mt-2 text-xs font-semibold uppercase tracking-widest opacity-70">
-                  La oferta se canta de viva voz
+                  {t('buzzer.bookWordHint')}
                 </span>
               </>
             ) : (
               <>
                 <span className="font-display text-3xl font-semibold uppercase tracking-[0.2em]">
-                  Rilancio
+                  {t('buzzer.rilancia')}
                 </span>
                 <span className="tabular font-display text-[clamp(4rem,20vw,7rem)] font-bold leading-none">
                   {minAmount}
                 </span>
                 <span className="text-xs font-semibold uppercase tracking-widest opacity-70">
-                  créditos
+                  {t('buzzer.credits')}
                 </span>
               </>
             )
           ) : premi && check.reason === 'own_bid' ? (
             <>
               <span className="animate-sold font-display text-[clamp(2.4rem,9vw,3.6rem)] font-bold uppercase leading-tight">
-                ¡Tenés la palabra!
+                {t('buzzer.haveWord')}
               </span>
               <span className="mt-1 text-sm font-semibold uppercase tracking-widest">
-                Cantá tu oferta al banditore
+                {t('buzzer.haveWordHint')}
               </span>
             </>
           ) : (
             <>
               <span className="font-display text-2xl font-semibold uppercase tracking-wider">
-                {REJECT_TITLES[check.reason] ?? 'No podés ofertar'}
+                {rejectTitle(t, check.reason)}
               </span>
               <span className="mt-1 max-w-[26ch] px-4 text-center text-sm">
-                {BID_REJECT_MESSAGES[check.reason]}
+                {errorText(t, { code: check.reason })}
               </span>
             </>
           )}
@@ -593,7 +719,7 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
               min={minAmount}
               value={customAmount}
               onChange={(e) => setCustomAmount(e.target.value)}
-              placeholder={`Mínimo ${minAmount}`}
+              placeholder={t('buzzer.freeBidMin', { n: minAmount })}
               autoFocus
               className="tabular w-0 flex-1 rounded-xl border chalk-line bg-pitch-900 px-4 text-center font-display text-3xl font-bold text-chalk placeholder:text-base placeholder:font-body placeholder:font-normal placeholder:text-chalk-faint"
             />
@@ -602,7 +728,7 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
               disabled={!customCheck || !customCheck.ok}
               className="rounded-xl border-2 border-primary/70 px-5 font-display text-xl font-bold uppercase text-primary disabled:border-pitch-700 disabled:text-chalk-faint"
             >
-              Ofertar
+              {t('buzzer.offer')}
             </button>
             <button
               type="button"
@@ -610,7 +736,7 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
                 setCustomOpen(false);
                 setCustomAmount('');
               }}
-              aria-label="Cerrar puja libre"
+              aria-label={t('buzzer.closeFreeBid')}
               className="rounded-xl border chalk-line px-4 text-chalk-dim"
             >
               ✕
@@ -623,11 +749,13 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
             disabled={!check.ok && check.reason !== 'own_bid' && check.reason !== 'too_low'}
             className="rounded-xl border chalk-line py-2.5 text-sm font-semibold uppercase tracking-widest text-chalk-dim disabled:opacity-40"
           >
-            Puja libre · monto a elección
+            {t('buzzer.freeBid')}
           </button>
         )}
         {customOpen && customAmount !== '' && customCheck && !customCheck.ok && (
-          <p className="text-center text-xs text-danger">{BID_REJECT_MESSAGES[customCheck.reason]}</p>
+          <p className="text-center text-xs text-danger">
+            {errorText(t, { code: customCheck.reason })}
+          </p>
         )}
         <MyPanel state={state} meId={meId} />
       </section>
@@ -635,19 +763,8 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
   );
 }
 
-const REJECT_TITLES: Record<string, string> = {
-  own_bid: 'Vas ganando',
-  role_full: 'Cupo lleno',
-  roster_full: 'Plantilla completa',
-  min_conflict: 'Cupos mínimos',
-  exceeds_max: 'Sin créditos',
-  too_low: 'Oferta baja',
-  no_auction: 'Sin subasta',
-  paused: 'Pausada',
-  unknown_participant: 'Fuera de la sala',
-};
-
 function CountdownBar({ state }: { state: RoomState }) {
+  const { t } = useT();
   const { remainingMs, fraction, active } = useCountdown(
     state.auction.deadline,
     auctionTimerMs(state),
@@ -660,7 +777,7 @@ function CountdownBar({ state }: { state: RoomState }) {
       <div className="mt-3">
         <div className="flex items-baseline justify-between">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-gold">
-            Pausada por el banditore
+            {t('buzzer.pausedBy')}
           </span>
           <span className="tabular font-display text-3xl font-bold leading-none text-gold">
             {formatCountdown(pausedMs)}
@@ -678,15 +795,15 @@ function CountdownBar({ state }: { state: RoomState }) {
   if (state.auction.deadline === null) {
     return (
       <p className="mt-3 text-center text-xs uppercase tracking-widest text-chalk-faint">
-        Sin límite — cierra el banditore
+        {t('buzzer.noTimer')}
       </p>
     );
   }
   return (
-    <div className="mt-3" role="timer" aria-label={`${formatCountdown(remainingMs)} restantes`}>
+    <div className="mt-3" role="timer" aria-label={t('count.remaining', { time: formatCountdown(remainingMs) })}>
       <div className="flex items-baseline justify-between">
         <span className="text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-          {state.auction.phase === 'called' ? 'Primera oferta' : 'Cierra en'}
+          {state.auction.phase === 'called' ? t('buzzer.firstBid') : t('buzzer.closesIn')}
         </span>
         <span
           className={`tabular font-display text-3xl font-bold leading-none ${
@@ -709,6 +826,7 @@ function CountdownBar({ state }: { state: RoomState }) {
 /* ————— sold / unsold ————— */
 
 function SoldBody({ state, player, meId }: { state: RoomState; player: Player; meId: string }) {
+  const { t } = useT();
   const winnerId = state.auction.winnerId;
   const price = currentBid(state)?.amount ?? 0;
   const mine = winnerId === meId;
@@ -718,18 +836,19 @@ function SoldBody({ state, player, meId }: { state: RoomState; player: Player; m
         <PlayerImg player={player} className="w-40" />
         <div>
           <p className={`font-display text-6xl font-bold uppercase leading-none ${mine ? 'text-gold animate-ticker-glow' : 'text-chalk'}`}>
-            ¡Vendido!
+            {t('buzzer.sold')}
           </p>
           <p className="mt-3 text-lg text-chalk-dim">
-            <span className="font-semibold text-chalk">{player.name}</span> a{' '}
-            <span className="font-semibold text-chalk">
-              {mine ? 'tu equipo' : participantName(state, winnerId)}
-            </span>{' '}
-            por <span className="tabular font-display text-3xl font-bold text-gold">{price}</span>
+            <span className="font-semibold text-chalk">{player.name}</span>{' '}
+            {t('buzzer.soldLine', {
+              winner: mine ? t('buzzer.yourTeam') : participantName(state, winnerId),
+            })}{' '}
+            <span className="tabular font-display text-3xl font-bold text-gold">{price}</span>{' '}
+            {t('buzzer.credits')}
           </p>
           {mine && (
             <p className="mt-2 font-display text-2xl font-semibold uppercase tracking-wider text-gold">
-              ¡Es tuyo!
+              {t('buzzer.itsYours')}
             </p>
           )}
         </div>
@@ -739,30 +858,28 @@ function SoldBody({ state, player, meId }: { state: RoomState; player: Player; m
 }
 
 function UnsoldBody({ player }: { player: Player }) {
+  const { t } = useT();
   return (
     <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
       <PlayerImg player={player} className="w-32 opacity-50 grayscale" />
-      <p className="font-display text-5xl font-bold uppercase text-chalk-dim">Desierto</p>
-      <p className="text-sm text-chalk-faint">
-        Nadie ofertó por {player.name}. Queda en la lista de richiama.
-      </p>
+      <p className="font-display text-5xl font-bold uppercase text-chalk-dim">{t('buzzer.unsold')}</p>
+      <p className="text-sm text-chalk-faint">{t('buzzer.unsoldText', { player: player.name })}</p>
     </main>
   );
 }
 
 /** Resumen final: el asta terminó (todos los cupos llenos o cierre del admin). */
 function FinishedBody({ state, meId }: { state: RoomState; meId: string }) {
+  const { t } = useT();
   const me = state.participants.find((p) => p.id === meId);
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-6">
       <div className="animate-sold flex flex-col items-center gap-2 py-8 text-center">
         <p className="font-display text-6xl font-bold uppercase leading-none text-gold">
-          ¡Asta terminada!
+          {t('buzzer.finished')}
         </p>
         <p className="mt-2 max-w-xs text-sm text-chalk-dim">
-          {me
-            ? `Cerraste con ${me.roster.length} jugadores. Esta es tu plantilla final.`
-            : 'Se terminó la subasta.'}
+          {me ? t('buzzer.finishedMine', { n: me.roster.length }) : t('buzzer.finishedText')}
         </p>
       </div>
       <MyPanel state={state} meId={meId} open />
@@ -774,6 +891,7 @@ function FinishedBody({ state, meId }: { state: RoomState; meId: string }) {
 
 function MyPanel({ state, meId, open = false }: { state: RoomState; meId: string; open?: boolean }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
   const me = state.participants.find((p) => p.id === meId);
   if (!me) return null;
   const credits = budgetRemaining(me, state.config);
@@ -783,10 +901,11 @@ function MyPanel({ state, meId, open = false }: { state: RoomState; meId: string
     <details open={open} className="rounded-xl border chalk-line bg-pitch-800/60">
       <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 [&::-webkit-details-marker]:hidden">
         <span className="text-xs font-semibold uppercase tracking-widest text-chalk-dim">
-          Mi equipo · {me.name}
+          {t('buzzer.myTeam', { name: me.name })}
         </span>
         <span className="tabular text-sm text-chalk-dim">
-          <span className="font-display text-lg font-bold text-gold">{credits}</span> cr · max{' '}
+          <span className="font-display text-lg font-bold text-gold">{credits}</span> cr ·{' '}
+          {t('buzzer.max')}{' '}
           <span className="font-display text-lg font-bold text-chalk">{Math.max(0, max)}</span>
         </span>
       </summary>
@@ -801,21 +920,21 @@ function MyPanel({ state, meId, open = false }: { state: RoomState; meId: string
                 className={`rounded-lg border px-2 py-1.5 text-center ${
                   left <= 0 ? 'border-pitch-600 bg-pitch-700/60 opacity-60' : 'chalk-line'
                 }`}
-                title={ROLE_NAMES[role]}
+                title={t(`role.${role}`)}
               >
                 <span className={`font-display text-lg font-bold ${ROLE_STYLES[role].text}`}>
                   {role}
                 </span>
                 <span className="tabular block text-xs text-chalk-dim">
                   {total - left}/{total}
-                  {left <= 0 ? ' · lleno' : ''}
+                  {left <= 0 ? t('buzzer.full') : ''}
                 </span>
               </div>
             );
           })}
         </div>
         {me.roster.length === 0 ? (
-          <p className="text-xs text-chalk-faint">Todavía no compraste a nadie.</p>
+          <p className="text-xs text-chalk-faint">{t('buzzer.emptyRoster')}</p>
         ) : (
           <ul className="space-y-1">
             {me.roster.map((entry) => {

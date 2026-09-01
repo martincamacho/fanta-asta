@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { Link, useParams } from 'react-router-dom';
 import {
   ROLES,
-  ROLE_NAMES,
   budgetRemaining,
   rosterTarget,
   spent,
@@ -14,6 +13,7 @@ import {
   type RoomState,
 } from '@fanta/shared';
 import { useStore } from '../store';
+import { useT } from '../i18n';
 import { actions, joinRoom, leaveRoom } from '../lib/socket';
 import { loadPlayers, uploadListone } from '../lib/api';
 import { downloadTabellone } from '../lib/tabellone';
@@ -24,6 +24,7 @@ import { buzzerUrl, currentBid, currentCallerId, normalize, participantName } fr
 import { flexSlotsError } from '../components/AuctionConfigForm';
 import { AssignmentsPanel } from '../components/AssignmentsPanel';
 import { CountdownRing } from '../components/CountdownRing';
+import { LangSwitcher } from '../components/LangSwitcher';
 import { PlayerImg } from '../components/PlayerImg';
 import { PlayerSheet } from '../components/PlayerSheet';
 import { RoleBadge, ROLE_STYLES } from '../components/RoleBadge';
@@ -39,6 +40,7 @@ export default function Admin() {
   const guard = useRoomGuard(code);
   const state = useStore((s) => s.state);
   const joinError = useStore((s) => s.joinError);
+  const { t } = useT();
   const token = persist.getAdminToken(code);
 
   useEffect(() => {
@@ -52,22 +54,20 @@ export default function Admin() {
     }
   }, [guard.status, code, token]);
 
-  if (guard.status === 'checking')
-    return <Center>Buscando la sala…</Center>;
+  if (guard.status === 'checking') return <Center>{t('admin.searching')}</Center>;
   if (guard.status === 'missing') return <RoomMissing code={code} />;
   if (!token)
     return (
       <Center>
         <div className="text-center">
           <p className="mb-2 font-display text-4xl font-bold uppercase text-danger">
-            Sin credencial de banditore
+            {t('admin.noTokenTitle')}
           </p>
           <p className="mb-6 max-w-sm text-chalk-dim">
-            Este navegador no tiene el token de admin de la sala {code.toUpperCase()}. Creá la sala
-            desde acá o abrila en el dispositivo original.
+            {t('admin.noTokenText', { code: code.toUpperCase() })}
           </p>
           <Link to="/" className={btnGhost}>
-            Volver al inicio
+            {t('admin.backHome')}
           </Link>
         </div>
       </Center>
@@ -76,12 +76,14 @@ export default function Admin() {
     return (
       <Center>
         <div className="text-center">
-          <p className="mb-2 font-display text-4xl font-bold uppercase text-danger">No pudiste entrar</p>
+          <p className="mb-2 font-display text-4xl font-bold uppercase text-danger">
+            {t('admin.joinErrTitle')}
+          </p>
           <p className="text-chalk-dim">{joinError}</p>
         </div>
       </Center>
     );
-  if (!state) return <Center>Conectando…</Center>;
+  if (!state) return <Center>{t('admin.connecting')}</Center>;
   return <AdminLive state={state} />;
 }
 
@@ -95,6 +97,7 @@ function Center({ children }: { children: ReactNode }) {
 
 function AdminLive({ state }: { state: RoomState }) {
   const connection = useStore((s) => s.connection);
+  const { t } = useT();
   const [copied, setCopied] = useState(false);
   const locked = state.participants.some((p) => p.roster.length > 0);
 
@@ -120,23 +123,26 @@ function AdminLive({ state }: { state: RoomState }) {
           <h1 className="font-display text-2xl font-bold uppercase text-chalk">
             {state.config.leagueName}
           </h1>
-          <span className="text-xs uppercase tracking-widest text-chalk-faint">banditore</span>
+          <span className="text-xs uppercase tracking-widest text-chalk-faint">
+            {t('admin.roleLabel')}
+          </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="font-display text-4xl font-bold uppercase tracking-[0.3em] text-gold">
             {state.code}
           </span>
+          <LangSwitcher compact />
           <button type="button" onClick={copyLink} className={btnGhost}>
-            {copied ? 'Copiado ✓' : 'Copiar link'}
+            {copied ? t('admin.copied') : t('admin.copyLink')}
           </button>
           <Link to={`/tablero/${state.code}`} target="_blank" className={btnGhost}>
-            Abrir tablero ↗
+            {t('admin.openBoard')}
           </Link>
           <a href={`/api/rooms/${state.code}/export/rose.csv`} download className={btnGhost}>
-            CSV Leghe
+            {t('admin.exportCsv')}
           </a>
           <a href={`/api/rooms/${state.code}/export/rose.xlsx`} download className={btnGhost}>
-            Excel (XLSX)
+            {t('admin.exportXlsx')}
           </a>
           <TabelloneButton state={state} />
           {state.finishedAt === null && <FinishButton state={state} />}
@@ -155,24 +161,24 @@ function AdminLive({ state }: { state: RoomState }) {
         <div className="min-w-0 space-y-6">
           {state.finishedAt !== null ? (
             <section className="rounded-2xl border-2 border-gold/50 bg-pitch-800/70 px-6 py-5">
-              <p className="font-display text-3xl font-bold uppercase text-gold">Asta terminada</p>
-              <p className="mt-1 text-sm text-chalk-dim">
-                Las plantillas finales están abajo; los ajustes manuales siguen disponibles.
+              <p className="font-display text-3xl font-bold uppercase text-gold">
+                {t('admin.finishedTitle')}
               </p>
+              <p className="mt-1 text-sm text-chalk-dim">{t('admin.finishedText')}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <a
                   href={`/api/rooms/${state.code}/export/rose.csv`}
                   download
                   className="rounded-xl bg-gold px-5 py-2.5 font-display text-xl font-bold uppercase text-pitch-950"
                 >
-                  CSV Leghe
+                  {t('admin.exportCsv')}
                 </a>
                 <a
                   href={`/api/rooms/${state.code}/export/rose.xlsx`}
                   download
                   className="rounded-xl border-2 border-gold/70 px-5 py-2.5 font-display text-xl font-bold uppercase text-gold"
                 >
-                  Excel (XLSX)
+                  {t('admin.exportXlsx')}
                 </a>
                 <TabelloneButton state={state} big />
               </div>
@@ -192,6 +198,7 @@ function AdminLive({ state }: { state: RoomState }) {
 /** Tabellone final como PNG, renderizado client-side. */
 function TabelloneButton({ state, big = false }: { state: RoomState; big?: boolean }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
   return (
     <button
       type="button"
@@ -203,25 +210,26 @@ function TabelloneButton({ state, big = false }: { state: RoomState; big?: boole
           : `${btnGhost} disabled:opacity-40`
       }
     >
-      Descargar imagen (PNG)
+      {t('admin.exportPng')}
     </button>
   );
 }
 
 /** Terminar el asta requiere doble click: es el cierre definitivo. */
 function FinishButton({ state }: { state: RoomState }) {
+  const { t } = useT();
   const [arm, setArm] = useState(false);
   const busy = state.auction.phase === 'called' || state.auction.phase === 'bidding';
   useEffect(() => {
     if (!arm) return;
-    const t = setTimeout(() => setArm(false), 3000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setArm(false), 3000);
+    return () => clearTimeout(timer);
   }, [arm]);
   return (
     <button
       type="button"
       disabled={busy}
-      title={busy ? 'Cerrá o anulá la subasta en curso primero' : 'Cerrar el asta y mostrar el resumen final'}
+      title={busy ? t('admin.finishBusyTip') : t('admin.finishTip')}
       onClick={() => {
         if (!arm) {
           setArm(true);
@@ -236,7 +244,7 @@ function FinishButton({ state }: { state: RoomState }) {
           : 'border-danger/40 text-danger/80 hover:bg-danger/10'
       }`}
     >
-      {arm ? '¿Seguro? Click de nuevo' : 'Terminar asta'}
+      {arm ? t('admin.finishConfirm') : t('admin.finish')}
     </button>
   );
 }
@@ -244,19 +252,22 @@ function FinishButton({ state }: { state: RoomState }) {
 /* ————— ronda de turnos ————— */
 
 function TurnPanel({ state }: { state: RoomState }) {
+  const { t } = useT();
   const caller = currentCallerId(state);
   return (
     <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-2xl font-bold uppercase text-chalk">Ronda de llamadas</h2>
+          <h2 className="font-display text-2xl font-bold uppercase text-chalk">
+            {t('admin.turnRound')}
+          </h2>
           {caller ? (
             <p className="mt-1 text-sm text-chalk-dim">
-              Llama:{' '}
+              {t('admin.turnCalls')}{' '}
               <span className="font-semibold text-gold">{participantName(state, caller)}</span>
             </p>
           ) : (
-            <p className="mt-1 text-sm text-chalk-dim">Todavía no se sorteó el orden.</p>
+            <p className="mt-1 text-sm text-chalk-dim">{t('admin.turnNotDrawn')}</p>
           )}
         </div>
         <div className="flex gap-2">
@@ -265,7 +276,7 @@ function TurnPanel({ state }: { state: RoomState }) {
             onClick={() => actions.drawOrder()}
             className="rounded-lg bg-gold px-4 py-2 font-display text-lg font-bold uppercase text-pitch-950"
           >
-            {state.callOrder.length === 0 ? 'Sortear orden' : 'Re-sortear'}
+            {state.callOrder.length === 0 ? t('admin.drawOrder') : t('admin.redraw')}
           </button>
           <button
             type="button"
@@ -273,7 +284,7 @@ function TurnPanel({ state }: { state: RoomState }) {
             disabled={caller === null}
             className={btnGhost + ' disabled:opacity-40'}
           >
-            Saltear turno
+            {t('admin.skipTurn')}
           </button>
         </div>
       </div>
@@ -305,6 +316,7 @@ function soldPlayerIds(state: RoomState): Set<number> {
 
 function Listone({ state }: { state: RoomState }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
   const [query, setQuery] = useState('');
   const [role, setRole] = useState<Role | null>(null);
   const [team, setTeam] = useState('');
@@ -351,14 +363,17 @@ function Listone({ state }: { state: RoomState }) {
   return (
     <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="font-display text-2xl font-bold uppercase text-chalk">Listone</h2>
+        <h2 className="font-display text-2xl font-bold uppercase text-chalk">
+          {t('admin.listone')}
+        </h2>
         <button
           type="button"
           onClick={callRandom}
           disabled={busy || list.length === 0}
           className="rounded-lg border-2 border-gold/70 px-4 py-1.5 font-display text-lg font-bold uppercase text-gold hover:bg-gold/10 disabled:opacity-40"
         >
-          Llamar al azar{role ? ` (${role})` : ''}
+          {t('admin.callRandom')}
+          {role ? ` (${role})` : ''}
         </button>
       </div>
 
@@ -366,7 +381,7 @@ function Listone({ state }: { state: RoomState }) {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar jugador o equipo…"
+          placeholder={t('admin.searchPh')}
           className={`${inputCls} w-full sm:w-56`}
         />
         <div className="flex gap-1">
@@ -381,17 +396,17 @@ function Listone({ state }: { state: RoomState }) {
                   ? ROLE_STYLES[r].badge
                   : `border chalk-line ${ROLE_STYLES[r].text} hover:bg-pitch-700`
               }`}
-              title={ROLE_NAMES[r]}
+              title={t(`role.${r}`)}
             >
               {r}
             </button>
           ))}
         </div>
         <select value={team} onChange={(e) => setTeam(e.target.value)} className={inputCls}>
-          <option value="">Todos los equipos</option>
-          {teams.map((t) => (
-            <option key={t} value={t}>
-              {t}
+          <option value="">{t('admin.allTeams')}</option>
+          {teams.map((tm) => (
+            <option key={tm} value={tm}>
+              {tm}
             </option>
           ))}
         </select>
@@ -400,8 +415,8 @@ function Listone({ state }: { state: RoomState }) {
           onChange={(e) => setSort(e.target.value as 'quotazione' | 'name')}
           className={inputCls}
         >
-          <option value="quotazione">Por quotazione</option>
-          <option value="name">Por nombre</option>
+          <option value="quotazione">{t('admin.byQuota')}</option>
+          <option value="name">{t('admin.byName')}</option>
         </select>
       </div>
 
@@ -454,7 +469,7 @@ function Listone({ state }: { state: RoomState }) {
                 <span className="ml-2 text-xs text-chalk-faint">{p.team}</span>
                 {state.unsoldPlayerIds.includes(p.id) && (
                   <span className="ml-2 rounded bg-role-p/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-role-p">
-                    richiama
+                    {t('admin.richiamaTag')}
                   </span>
                 )}
               </span>
@@ -465,22 +480,20 @@ function Listone({ state }: { state: RoomState }) {
             <button
               type="button"
               onClick={() => setSheet(p)}
-              aria-label={`Ficha de ${p.name}`}
-              title="Ver ficha"
+              aria-label={t('admin.fichaOf', { name: p.name })}
+              title={t('admin.seeFicha')}
               className="shrink-0 rounded px-1.5 py-1 text-xs font-bold text-gold hover:bg-pitch-700/60"
             >
-              ficha
+              {t('admin.ficha')}
             </button>
           </li>
         ))}
         {list.length === 0 && (
-          <li className="py-6 text-center text-sm text-chalk-faint">
-            No queda ningún jugador disponible con esos filtros.
-          </li>
+          <li className="py-6 text-center text-sm text-chalk-faint">{t('admin.noPlayers')}</li>
         )}
         {list.length > 100 && (
           <li className="py-2 text-center text-xs text-chalk-faint">
-            {list.length - 100} más — afiná la búsqueda
+            {t('admin.morePlayers', { n: list.length - 100 })}
           </li>
         )}
       </ul>
@@ -503,23 +516,26 @@ function CallConfirm({
   onSheet: () => void;
   onDismiss: () => void;
 }) {
+  const { t } = useT();
   return (
     <div className="animate-rise mb-3 flex items-center gap-4 rounded-xl border-2 border-gold/50 bg-pitch-900 p-4">
       <PlayerImg player={player} className="w-16 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="truncate font-display text-2xl font-bold uppercase text-chalk">{player.name}</p>
         <p className="text-sm text-chalk-dim">
-          {player.team} · {ROLE_NAMES[player.role]} · quot.{' '}
+          {player.team} · {t(`role.${player.role}`)} · {t('buzzer.quot')}{' '}
           <span className="tabular">{player.quotazione}</span>
-          {isRichiama && <span className="ml-2 font-semibold text-role-p">richiama</span>}
+          {isRichiama && (
+            <span className="ml-2 font-semibold text-role-p">{t('admin.richiamaTag')}</span>
+          )}
         </p>
-        {disabled && <p className="mt-1 text-xs text-danger">Hay una subasta en curso.</p>}
+        {disabled && <p className="mt-1 text-xs text-danger">{t('admin.auctionBusy')}</p>}
         <button
           type="button"
           onClick={onSheet}
           className="mt-1 text-xs font-semibold uppercase tracking-wider text-gold underline decoration-dotted"
         >
-          Ver ficha
+          {t('admin.seeFicha')}
         </button>
       </div>
       <button
@@ -528,9 +544,9 @@ function CallConfirm({
         disabled={disabled}
         className="rounded-xl bg-gold px-6 py-3 font-display text-xl font-bold uppercase text-pitch-950 disabled:opacity-40"
       >
-        Llamar
+        {t('admin.call')}
       </button>
-      <button type="button" onClick={onDismiss} aria-label="Descartar" className={btnGhost}>
+      <button type="button" onClick={onDismiss} aria-label={t('admin.dismiss')} className={btnGhost}>
         ✕
       </button>
     </div>
@@ -540,6 +556,7 @@ function CallConfirm({
 /** Listone propio de la sala: el admin sube un CSV y todas las vistas pasan a usarlo.
  *  Solo disponible mientras no haya compras. */
 function ListoneUpload({ state }: { state: RoomState }) {
+  const { t } = useT();
   const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -547,7 +564,7 @@ function ListoneUpload({ state }: { state: RoomState }) {
     if (!file) return;
     const token = persist.getAdminToken(state.code);
     if (!token) {
-      setStatus({ kind: 'error', text: 'No hay token de admin en este navegador.' });
+      setStatus({ kind: 'error', text: t('admin.listoneNoToken') });
       return;
     }
     setBusy(true);
@@ -555,12 +572,12 @@ function ListoneUpload({ state }: { state: RoomState }) {
     try {
       const csv = await file.text();
       const { count } = await uploadListone(state.code, token, csv);
-      setStatus({ kind: 'ok', text: `Listone cargado: ${count} jugadores.` });
+      setStatus({ kind: 'ok', text: t('admin.listoneLoaded', { n: count }) });
       await loadPlayers(state.code, true);
     } catch (err) {
       setStatus({
         kind: 'error',
-        text: err instanceof Error ? err.message : 'No se pudo cargar el listone.',
+        text: err instanceof Error ? err.message : t('admin.listoneErr'),
       });
     } finally {
       setBusy(false);
@@ -569,16 +586,14 @@ function ListoneUpload({ state }: { state: RoomState }) {
 
   return (
     <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
-      <h2 className="font-display text-2xl font-bold uppercase text-chalk">Listone propio</h2>
-      <p className="mb-3 mt-1 text-xs text-chalk-dim">
-        Subí un CSV y esta sala subasta con tu lista en vez de la global. Formatos: clásico de
-        FantaBuzzer (C,T,M,Nome,Squadra,Quotazione,ID,EID) o genérico (Nome,Squadra,Ruolo,Quotazione).
-        Solo hasta la primera compra.
-      </p>
+      <h2 className="font-display text-2xl font-bold uppercase text-chalk">
+        {t('admin.listoneOwn')}
+      </h2>
+      <p className="mb-3 mt-1 text-xs text-chalk-dim">{t('admin.listoneOwnText')}</p>
       <label
         className={`inline-block cursor-pointer rounded-lg border-2 border-gold/70 px-4 py-2 font-display text-lg font-bold uppercase text-gold hover:bg-gold/10 ${busy ? 'opacity-50' : ''}`}
       >
-        {busy ? 'Cargando…' : 'Elegir archivo CSV'}
+        {busy ? t('admin.listoneUploading') : t('admin.listonePick')}
         <input
           type="file"
           accept=".csv,text/csv,text/plain"
@@ -606,16 +621,17 @@ function ListoneUpload({ state }: { state: RoomState }) {
 
 function Richiama({ state }: { state: RoomState }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
   const sold = useMemo(() => soldPlayerIds(state), [state]);
   const list = state.unsoldPlayerIds.filter((id) => !sold.has(id));
   if (list.length === 0) return null;
   const busy = state.auction.phase === 'called' || state.auction.phase === 'bidding';
   return (
     <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
-      <h2 className="mb-1 font-display text-2xl font-bold uppercase text-chalk">Richiama</h2>
-      <p className="mb-3 text-xs text-chalk-dim">
-        Quedaron desiertos — volvé a llamarlos cuando quieras.
-      </p>
+      <h2 className="mb-1 font-display text-2xl font-bold uppercase text-chalk">
+        {t('admin.richiama')}
+      </h2>
+      <p className="mb-3 text-xs text-chalk-dim">{t('admin.richiamaText')}</p>
       <ul className="flex flex-wrap gap-2">
         {list.map((id) => {
           const p = players.get(id);
@@ -645,6 +661,7 @@ function Richiama({ state }: { state: RoomState }) {
 function AuctionPanel({ state }: { state: RoomState }) {
   const players = useStore((s) => s.players);
   const eventSeq = useStore((s) => s.eventSeq);
+  const { t } = useT();
   const phase = state.auction.phase;
   const player = state.auction.playerId !== null ? players.get(state.auction.playerId) : undefined;
   const bid = currentBid(state);
@@ -653,9 +670,9 @@ function AuctionPanel({ state }: { state: RoomState }) {
     return (
       <section className="flex items-center justify-between rounded-2xl border chalk-line bg-pitch-800/50 px-6 py-5">
         <p className="font-display text-2xl font-bold uppercase text-chalk-dim">
-          Sin subasta en curso
+          {t('admin.noAuction')}
         </p>
-        <p className="text-sm text-chalk-faint">Llamá un jugador desde el listone.</p>
+        <p className="text-sm text-chalk-faint">{t('admin.noAuctionText')}</p>
       </section>
     );
   }
@@ -670,16 +687,18 @@ function AuctionPanel({ state }: { state: RoomState }) {
             {player.name}
           </h2>
           <p className="mt-1 text-sm text-chalk-dim">
-            {player.team} · quot. <span className="tabular">{player.quotazione}</span>
+            {player.team} · {t('buzzer.quot')} <span className="tabular">{player.quotazione}</span>
           </p>
           <div className="mt-3 flex items-baseline gap-3">
             {phase === 'sold' ? (
               <p className="animate-sold font-display text-3xl font-bold uppercase text-gold">
-                Vendido a {participantName(state, state.auction.winnerId)} por{' '}
+                {t('admin.soldTo', { name: participantName(state, state.auction.winnerId) })}{' '}
                 <span className="tabular">{bid?.amount ?? 0}</span>
               </p>
             ) : phase === 'unsold' ? (
-              <p className="font-display text-3xl font-bold uppercase text-chalk-dim">Desierto</p>
+              <p className="font-display text-3xl font-bold uppercase text-chalk-dim">
+                {t('admin.unsold')}
+              </p>
             ) : bid ? (
               <>
                 <span key={eventSeq} className="tabular animate-bid-pop font-display text-6xl font-bold leading-none text-gold">
@@ -691,7 +710,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
               </>
             ) : (
               <span className="font-display text-2xl font-semibold uppercase text-chalk-faint">
-                Sin ofertas
+                {t('admin.noBids')}
               </span>
             )}
           </div>
@@ -711,7 +730,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
             onClick={() => actions.close()}
             className="rounded-xl bg-gold px-5 py-2.5 font-display text-xl font-bold uppercase text-pitch-950"
           >
-            {bid ? 'Cerrar ya · adjudicar' : 'Cerrar ya · desierto'}
+            {bid ? t('admin.closeAward') : t('admin.closeDesert')}
           </button>
           {state.auction.pausedRemainingMs === null ? (
             <button
@@ -719,7 +738,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
               onClick={() => actions.pause()}
               className="rounded-xl border-2 border-chalk/40 px-5 py-2.5 font-display text-xl font-bold uppercase text-chalk hover:bg-pitch-700"
             >
-              Pausar
+              {t('admin.pause')}
             </button>
           ) : (
             <button
@@ -727,7 +746,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
               onClick={() => actions.resume()}
               className="rounded-xl border-2 border-gold px-5 py-2.5 font-display text-xl font-bold uppercase text-gold hover:bg-gold/10"
             >
-              Reanudar
+              {t('admin.resume')}
             </button>
           )}
           <button
@@ -735,7 +754,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
             onClick={() => actions.cancel()}
             className="rounded-xl border-2 border-danger/60 px-5 py-2.5 font-display text-xl font-bold uppercase text-danger hover:bg-danger/10"
           >
-            Anular
+            {t('admin.cancel')}
           </button>
         </div>
       )}
@@ -743,7 +762,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
       {state.auction.pausedRemainingMs !== null &&
         (phase === 'called' || phase === 'bidding') && (
           <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2 text-sm font-semibold text-gold">
-            Subasta pausada — las ofertas están bloqueadas hasta que reanudes.
+            {t('admin.pausedNote')}
           </p>
         )}
 
@@ -758,7 +777,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
       {state.auction.bids.length > 0 && (
         <div className="mt-4 border-t chalk-line pt-3">
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-chalk-dim">
-            Historial de ofertas
+            {t('admin.bidHistory')}
           </p>
           <ul className="max-h-36 space-y-1 overflow-y-auto">
             {[...state.auction.bids].reverse().map((b, i) => (
@@ -780,6 +799,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
 
 /** Premi&Parla: quien tiene la palabra cantó su oferta de viva voz; el banditore fija el monto. */
 function SpokenBid({ state }: { state: RoomState }) {
+  const { t } = useT();
   const bid = currentBid(state);
   const [value, setValue] = useState('');
   if (!bid) return null;
@@ -796,17 +816,19 @@ function SpokenBid({ state }: { state: RoomState }) {
       }}
     >
       <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">Palabra</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+          {t('admin.wordLabel')}
+        </p>
         <p className="truncate font-display text-2xl font-bold text-chalk">
           {participantName(state, bid.participantId)}
         </p>
         <p className="tabular text-xs text-chalk-dim">
-          Reserva actual: <span className="font-semibold text-gold">{bid.amount}</span>
+          {t('admin.wordReserve')} <span className="font-semibold text-gold">{bid.amount}</span>
         </p>
       </div>
       <label className="block">
         <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-          Monto cantado
+          {t('admin.wordAmount')}
         </span>
         <input
           type="number"
@@ -822,7 +844,7 @@ function SpokenBid({ state }: { state: RoomState }) {
         disabled={amount <= 0}
         className="rounded-xl bg-primary px-6 py-2.5 font-display text-xl font-bold uppercase text-white disabled:opacity-40"
       >
-        Fijar
+        {t('admin.wordSet')}
       </button>
     </form>
   );
@@ -831,6 +853,7 @@ function SpokenBid({ state }: { state: RoomState }) {
 /** Adjudicación directa: nadie más va a ofertar (o se arregló de palabra) y no se quiere
  *  esperar el countdown. Emite auction:cancel + admin:assign, en ese orden. */
 function DirectAward({ state, player }: { state: RoomState; player: Player }) {
+  const { t } = useT();
   const bid = currentBid(state);
   const [open, setOpen] = useState(false);
   const [who, setWho] = useState('');
@@ -862,7 +885,7 @@ function DirectAward({ state, player }: { state: RoomState; player: Player }) {
         disabled={state.participants.length === 0}
         className="mt-3 text-sm font-semibold uppercase tracking-wider text-chalk-dim underline decoration-dotted hover:text-chalk disabled:opacity-40"
       >
-        Adjudicar directo…
+        {t('admin.directAward')}
       </button>
     );
   }
@@ -870,15 +893,12 @@ function DirectAward({ state, player }: { state: RoomState; player: Player }) {
   return (
     <div className="animate-rise mt-3 rounded-xl border-2 border-role-p/60 bg-pitch-900 p-4">
       <p className="text-xs font-semibold uppercase tracking-widest text-role-p">
-        Adjudicación directa
+        {t('admin.directTitle')}
       </p>
       {confirming && target ? (
         <>
           <p className="mt-2 text-sm text-chalk">
-            Adjudicar <span className="font-semibold">{player.name}</span> a{' '}
-            <span className="font-semibold">{target.name}</span> por{' '}
-            <span className="tabular font-display text-lg font-bold text-gold">{priceNum}</span>{' '}
-            créditos. Se anula la subasta en curso y se asigna directo (sin validación de reglas).
+            {t('admin.directConfirm', { player: player.name, name: target.name, n: priceNum })}
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -886,10 +906,10 @@ function DirectAward({ state, player }: { state: RoomState; player: Player }) {
               onClick={award}
               className="rounded-lg bg-role-p px-4 py-1.5 font-display text-lg font-bold uppercase text-pitch-950"
             >
-              Confirmar
+              {t('admin.confirm')}
             </button>
             <button type="button" onClick={() => setConfirming(false)} className={btnGhost}>
-              Volver
+              {t('admin.back')}
             </button>
           </div>
         </>
@@ -903,7 +923,7 @@ function DirectAward({ state, player }: { state: RoomState; player: Player }) {
         >
           <label className="block">
             <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-              Participante
+              {t('admin.directParticipant')}
             </span>
             <select
               value={who}
@@ -919,7 +939,7 @@ function DirectAward({ state, player }: { state: RoomState; player: Player }) {
           </label>
           <label className="block">
             <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-              Créditos
+              {t('admin.directCredits')}
             </span>
             <input
               type="number"
@@ -934,10 +954,10 @@ function DirectAward({ state, player }: { state: RoomState; player: Player }) {
             disabled={!target}
             className="rounded-lg bg-gold px-4 py-2 font-display text-lg font-bold uppercase text-pitch-950 disabled:opacity-40"
           >
-            Adjudicar
+            {t('admin.directSubmit')}
           </button>
           <button type="button" onClick={() => setOpen(false)} className={btnGhost}>
-            Cancelar
+            {t('admin.cancelBtn')}
           </button>
         </form>
       )}
@@ -957,22 +977,21 @@ type Adjust =
   | { kind: 'budget'; participantId: string; delta: number; label: string };
 
 function ParticipantsPanel({ state }: { state: RoomState }) {
+  const { t } = useT();
   const [adjust, setAdjust] = useState<Adjust | null>(null);
 
   return (
     <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
       <h2 className="mb-1 font-display text-2xl font-bold uppercase text-chalk">
-        Participantes · {state.participants.length}
+        {t('admin.participants', { n: state.participants.length })}
       </h2>
-      <p className="mb-4 text-xs text-chalk-dim">
-        Abrí una plantilla para los ajustes manuales: corregir precio, mover o quitar jugadores.
-      </p>
+      <p className="mb-4 text-xs text-chalk-dim">{t('admin.participantsText')}</p>
 
       {adjust && <AdjustConfirm state={state} adjust={adjust} onDone={() => setAdjust(null)} />}
 
       {state.participants.length === 0 ? (
         <p className="py-4 text-center text-sm text-chalk-faint">
-          Nadie entró todavía. Compartí el código {state.code}.
+          {t('admin.nobodyYet', { code: state.code })}
         </p>
       ) : (
         <ul className="grid gap-3 xl:grid-cols-2">
@@ -995,6 +1014,7 @@ function ParticipantCard({
   onAdjust: (a: Adjust) => void;
 }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
   const credits = budgetRemaining(p, state.config);
   const filled = p.roster.length;
   // Con cupos flexibles el total es rosterSize, no la suma de máximos.
@@ -1013,10 +1033,10 @@ function ParticipantCard({
             type="button"
             onClick={() => actions.kick(p.id)}
             disabled={p.roster.length > 0}
-            title={p.roster.length > 0 ? 'Solo se puede expulsar a quien no compró nada' : 'Expulsar'}
+            title={p.roster.length > 0 ? t('admin.kickTip') : t('admin.kick')}
             className="rounded px-2 py-1 text-xs font-semibold uppercase text-danger/80 hover:bg-danger/10 disabled:opacity-30"
           >
-            Expulsar
+            {t('admin.kick')}
           </button>
         </span>
       </div>
@@ -1027,14 +1047,14 @@ function ParticipantCard({
         {p.budgetBonus !== 0 && (
           <span
             className={`tabular text-xs font-semibold ${p.budgetBonus > 0 ? 'text-success' : 'text-danger'}`}
-            title="Bonus/malus aplicado por el banditore"
+            title={t('admin.bonusTip')}
           >
             {state.config.budget} {p.budgetBonus > 0 ? '+' : '−'}
             {Math.abs(p.budgetBonus)}
           </span>
         )}
         <span className="tabular text-sm text-chalk-dim">
-          {filled}/{total} cupos
+          {filled}/{total} {t('admin.slots')}
         </span>
         <span className="flex gap-1.5 text-xs">
           {ROLES.map((r) => {
@@ -1050,14 +1070,12 @@ function ParticipantCard({
         </span>
       </div>
       {credits < 0 && (
-        <p className="mt-1 text-xs font-semibold text-danger">
-          ⚠ Créditos negativos — revisá los ajustes manuales.
-        </p>
+        <p className="mt-1 text-xs font-semibold text-danger">{t('admin.negativeWarn')}</p>
       )}
 
       <details className="mt-2">
         <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-widest text-chalk-dim hover:text-chalk [&::-webkit-details-marker]:hidden">
-          Plantilla y ajustes ▾
+          {t('admin.rosterToggle')}
         </summary>
         <RosterEditor participant={p} state={state} onAdjust={onAdjust} />
       </details>
@@ -1075,6 +1093,7 @@ function BudgetAdjust({
   state: RoomState;
   onAdjust: (a: Adjust) => void;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState('');
   return open ? (
@@ -1088,7 +1107,12 @@ function BudgetAdjust({
           kind: 'budget',
           participantId: p.id,
           delta,
-          label: `${delta > 0 ? 'Bonus' : 'Malus'} de ${delta > 0 ? '+' : ''}${delta} créditos a ${p.name} (queda con ${budgetRemaining(p, state.config) + delta} cr)`,
+          label: t('admin.budgetLabel', {
+            sign: delta > 0 ? t('admin.bonusWord') : t('admin.malusWord'),
+            delta: `${delta > 0 ? '+' : ''}${delta}`,
+            name: p.name,
+            left: budgetRemaining(p, state.config) + delta,
+          }),
         });
         setOpen(false);
         setValue('');
@@ -1100,11 +1124,11 @@ function BudgetAdjust({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="±N"
-        aria-label={`Delta de créditos para ${p.name}`}
+        aria-label={t('admin.budgetAria', { name: p.name })}
         className={`${inputCls} tabular w-16 py-0.5 text-sm`}
       />
       <button type="submit" className="text-xs font-bold uppercase text-gold">
-        OK
+        {t('admin.okBtn')}
       </button>
       <button
         type="button"
@@ -1121,10 +1145,10 @@ function BudgetAdjust({
     <button
       type="button"
       onClick={() => setOpen(true)}
-      title="Bonus o malus de créditos (reglas caseras)"
+      title={t('admin.budgetTip')}
       className="rounded px-2 py-1 text-xs font-semibold uppercase text-chalk-dim hover:bg-pitch-700 hover:text-chalk"
     >
-      ± Créditos
+      {t('admin.budgetBtn')}
     </button>
   );
 }
@@ -1139,6 +1163,7 @@ function RosterEditor({
   onAdjust: (a: Adjust) => void;
 }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
   const [priceEdit, setPriceEdit] = useState<{ playerId: number; value: string } | null>(null);
   const [moveEdit, setMoveEdit] = useState<number | null>(null);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -1146,17 +1171,14 @@ function RosterEditor({
 
   return (
     <div className="mt-2 space-y-1 border-t chalk-line pt-2">
-      {p.roster.length === 0 && (
-        <p className="text-xs text-chalk-faint">Plantilla vacía.</p>
-      )}
+      {p.roster.length === 0 && <p className="text-xs text-chalk-faint">{t('admin.emptyRoster')}</p>}
       {p.roster.map((entry) => {
         const pl = players.get(entry.playerId);
+        const playerLabel = pl?.name ?? `#${entry.playerId}`;
         return (
           <div key={entry.playerId} className="flex flex-wrap items-center gap-2 text-sm">
             {pl && <RoleBadge role={pl.role} size="sm" />}
-            <span className="min-w-0 flex-1 truncate text-chalk">
-              {pl?.name ?? `#${entry.playerId}`}
-            </span>
+            <span className="min-w-0 flex-1 truncate text-chalk">{playerLabel}</span>
             {priceEdit?.playerId === entry.playerId ? (
               <form
                 className="flex items-center gap-1"
@@ -1168,7 +1190,7 @@ function RosterEditor({
                     playerId: entry.playerId,
                     participantId: p.id,
                     price,
-                    label: `Corregir precio de ${pl?.name ?? entry.playerId} a ${price} (era ${entry.price})`,
+                    label: t('admin.adjPrice', { player: playerLabel, n: price, old: entry.price }),
                   });
                   setPriceEdit(null);
                 }}
@@ -1181,8 +1203,12 @@ function RosterEditor({
                   onChange={(e) => setPriceEdit({ playerId: entry.playerId, value: e.target.value })}
                   className={`${inputCls} tabular w-20 py-1 text-sm`}
                 />
-                <button type="submit" className="text-xs font-bold uppercase text-gold">OK</button>
-                <button type="button" onClick={() => setPriceEdit(null)} className="text-xs text-chalk-faint">✕</button>
+                <button type="submit" className="text-xs font-bold uppercase text-gold">
+                  {t('admin.okBtn')}
+                </button>
+                <button type="button" onClick={() => setPriceEdit(null)} className="text-xs text-chalk-faint">
+                  ✕
+                </button>
               </form>
             ) : moveEdit === entry.playerId ? (
               <span className="flex items-center gap-1">
@@ -1197,14 +1223,19 @@ function RosterEditor({
                       playerId: entry.playerId,
                       participantId: target,
                       price: entry.price,
-                      label: `Mover ${pl?.name ?? entry.playerId} de ${p.name} a ${participantName(state, target)} por ${entry.price}`,
+                      label: t('admin.adjMove', {
+                        player: playerLabel,
+                        from: p.name,
+                        to: participantName(state, target),
+                        n: entry.price,
+                      }),
                     });
                     setMoveEdit(null);
                   }}
                   className={`${inputCls} py-1 text-sm`}
                 >
                   <option value="" disabled>
-                    Mover a…
+                    {t('admin.moveTo')}
                   </option>
                   {state.participants
                     .filter((x) => x.id !== p.id)
@@ -1214,7 +1245,9 @@ function RosterEditor({
                       </option>
                     ))}
                 </select>
-                <button type="button" onClick={() => setMoveEdit(null)} className="text-xs text-chalk-faint">✕</button>
+                <button type="button" onClick={() => setMoveEdit(null)} className="text-xs text-chalk-faint">
+                  ✕
+                </button>
               </span>
             ) : (
               <>
@@ -1224,14 +1257,14 @@ function RosterEditor({
                   onClick={() => setPriceEdit({ playerId: entry.playerId, value: String(entry.price) })}
                   className="text-xs text-chalk-dim underline decoration-dotted hover:text-chalk"
                 >
-                  precio
+                  {t('admin.priceBtn')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setMoveEdit(entry.playerId)}
                   className="text-xs text-chalk-dim underline decoration-dotted hover:text-chalk"
                 >
-                  mover
+                  {t('admin.moveBtn')}
                 </button>
                 <button
                   type="button"
@@ -1239,31 +1272,35 @@ function RosterEditor({
                     onAdjust({
                       kind: 'unassign',
                       playerId: entry.playerId,
-                      label: `Quitar ${pl?.name ?? entry.playerId} de ${p.name} (devuelve ${entry.price} cr)`,
+                      label: t('admin.adjRemove', {
+                        player: playerLabel,
+                        name: p.name,
+                        n: entry.price,
+                      }),
                     })
                   }
                   className="text-xs text-danger/80 underline decoration-dotted hover:text-danger"
                 >
-                  quitar
+                  {t('admin.removeBtn')}
                 </button>
                 <button
                   type="button"
                   disabled={auctionBusy}
-                  title={
-                    auctionBusy
-                      ? 'Cerrá o anulá la subasta en curso primero'
-                      : 'Devuelve los créditos y el jugador sale de nuevo a subasta'
-                  }
+                  title={auctionBusy ? t('admin.finishBusyTip') : t('admin.reauctionTip')}
                   onClick={() =>
                     onAdjust({
                       kind: 're_auction',
                       playerId: entry.playerId,
-                      label: `Volver a subastar a ${pl?.name ?? entry.playerId}: se le devuelven ${entry.price} créditos a ${p.name} y el jugador sale de nuevo a subasta`,
+                      label: t('admin.adjReauction', {
+                        player: playerLabel,
+                        name: p.name,
+                        n: entry.price,
+                      }),
                     })
                   }
                   className="text-xs text-gold underline decoration-dotted hover:brightness-110 disabled:opacity-40"
                 >
-                  volver a subastar
+                  {t('admin.reauctionBtn')}
                 </button>
               </>
             )}
@@ -1287,7 +1324,7 @@ function RosterEditor({
           onClick={() => setAssignOpen(true)}
           className="mt-1 text-xs font-semibold uppercase tracking-wider text-chalk-dim underline decoration-dotted hover:text-chalk"
         >
-          + Asignar jugador directo
+          {t('admin.assignDirect')}
         </button>
       )}
     </div>
@@ -1307,6 +1344,7 @@ function AssignPicker({
   onClose: () => void;
 }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
   const [query, setQuery] = useState('');
   const [price, setPrice] = useState('1');
   const [picked, setPicked] = useState<Player | null>(null);
@@ -1324,9 +1362,11 @@ function AssignPicker({
     <div className="mt-2 rounded-lg border chalk-line bg-pitch-950/60 p-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-widest text-chalk-dim">
-          Asignar a {participant.name}
+          {t('admin.assignTo', { name: participant.name })}
         </p>
-        <button type="button" onClick={onClose} aria-label="Cerrar" className="text-xs text-chalk-faint">✕</button>
+        <button type="button" onClick={onClose} aria-label={t('admin.close')} className="text-xs text-chalk-faint">
+          ✕
+        </button>
       </div>
       {picked ? (
         <form
@@ -1339,7 +1379,7 @@ function AssignPicker({
               playerId: picked.id,
               participantId: participant.id,
               price: value,
-              label: `Asignar ${picked.name} a ${participant.name} por ${value}`,
+              label: t('admin.adjAssign', { player: picked.name, name: participant.name, n: value }),
             });
           }}
         >
@@ -1351,10 +1391,10 @@ function AssignPicker({
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             className={`${inputCls} tabular w-20 py-1 text-sm`}
-            aria-label="Precio"
+            aria-label={t('admin.assignPrice')}
           />
           <button type="submit" className="rounded bg-gold px-3 py-1 font-display text-sm font-bold uppercase text-pitch-950">
-            Asignar
+            {t('admin.assignSubmit')}
           </button>
         </form>
       ) : (
@@ -1362,7 +1402,7 @@ function AssignPicker({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar jugador disponible…"
+            placeholder={t('admin.assignSearchPh')}
             autoFocus
             className={`${inputCls} mt-2 w-full py-1.5 text-sm`}
           />
@@ -1397,14 +1437,13 @@ function AdjustConfirm({
   adjust: Adjust;
   onDone: () => void;
 }) {
+  const { t } = useT();
   const warning = useMemo(() => {
     if (adjust.kind === 'budget') {
       const target = state.participants.find((x) => x.id === adjust.participantId);
       if (!target) return null;
       const remaining = budgetRemaining(target, state.config) + adjust.delta;
-      return remaining < 0
-        ? `Este ajuste deja a ${target.name} con ${remaining} créditos (negativo).`
-        : null;
+      return remaining < 0 ? t('admin.adjustWarn', { name: target.name, n: remaining }) : null;
     }
     if (adjust.kind !== 'assign') return null;
     const target = state.participants.find((x) => x.id === adjust.participantId);
@@ -1412,10 +1451,8 @@ function AdjustConfirm({
     const existing = target.roster.find((e) => e.playerId === adjust.playerId);
     const newSpent = spent(target) - (existing?.price ?? 0) + adjust.price;
     const remaining = state.config.budget + target.budgetBonus - newSpent;
-    return remaining < 0
-      ? `Este ajuste deja a ${target.name} con ${remaining} créditos (negativo).`
-      : null;
-  }, [state, adjust]);
+    return remaining < 0 ? t('admin.adjustWarn', { name: target.name, n: remaining }) : null;
+  }, [state, adjust, t]);
 
   function confirm() {
     if (adjust.kind === 'assign') {
@@ -1432,23 +1469,23 @@ function AdjustConfirm({
   }
 
   return (
-    <div className="animate-rise mb-4 rounded-xl border-2 border-role-p/60 bg-pitch-900 p-4" role="alertdialog" aria-label="Confirmar ajuste manual">
-      <p className="text-xs font-semibold uppercase tracking-widest text-role-p">Ajuste manual</p>
-      <p className="mt-1 text-sm text-chalk">{adjust.label}</p>
-      <p className="mt-1 text-xs text-chalk-dim">
-        El servidor no valida reglas en los ajustes manuales: el banditore manda.
+    <div className="animate-rise mb-4 rounded-xl border-2 border-role-p/60 bg-pitch-900 p-4" role="alertdialog" aria-label={t('admin.adjustTitle')}>
+      <p className="text-xs font-semibold uppercase tracking-widest text-role-p">
+        {t('admin.adjustTitle')}
       </p>
-      {warning && <p className="mt-2 text-sm font-semibold text-danger">⚠ {warning}</p>}
+      <p className="mt-1 text-sm text-chalk">{adjust.label}</p>
+      <p className="mt-1 text-xs text-chalk-dim">{t('admin.adjustNote')}</p>
+      {warning && <p className="mt-2 text-sm font-semibold text-danger">{warning}</p>}
       <div className="mt-3 flex gap-2">
         <button
           type="button"
           onClick={confirm}
           className="rounded-lg bg-role-p px-4 py-1.5 font-display text-lg font-bold uppercase text-pitch-950"
         >
-          Confirmar
+          {t('admin.confirm')}
         </button>
         <button type="button" onClick={onDone} className={btnGhost}>
-          Cancelar
+          {t('admin.cancelBtn')}
         </button>
       </div>
     </div>
@@ -1458,13 +1495,14 @@ function AdjustConfirm({
 /* ————— config ————— */
 
 function ConfigPanel({ state, locked }: { state: RoomState; locked: boolean }) {
+  const { t } = useT();
   return (
     <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
-      <h2 className="mb-1 font-display text-2xl font-bold uppercase text-chalk">Configuración</h2>
+      <h2 className="mb-1 font-display text-2xl font-bold uppercase text-chalk">
+        {t('admin.configTitle')}
+      </h2>
       {locked ? (
-        <p className="text-xs text-chalk-dim">
-          Bloqueada: ya hubo una venta. Los ajustes finos van por “Plantilla y ajustes”.
-        </p>
+        <p className="text-xs text-chalk-dim">{t('admin.configLocked')}</p>
       ) : (
         <ConfigForm key={JSON.stringify(state.config)} config={state.config} />
       )}
@@ -1473,6 +1511,7 @@ function ConfigPanel({ state, locked }: { state: RoomState; locked: boolean }) {
 }
 
 function ConfigForm({ config }: { config: RoomConfig }) {
+  const { t } = useT();
   const [draft, setDraft] = useState<RoomConfig>({ ...config, slots: { ...config.slots } });
   const [flexOn, setFlexOn] = useState(config.slotsMin !== undefined);
   const [slotsMin, setSlotsMin] = useState<Record<Role, number>>(
@@ -1480,7 +1519,7 @@ function ConfigForm({ config }: { config: RoomConfig }) {
   );
   const [rosterSize, setRosterSize] = useState(config.rosterSize ?? totalSlots(config));
 
-  const flexError = flexOn ? flexSlotsError(draft.slots, slotsMin, rosterSize) : null;
+  const flexError = flexOn ? flexSlotsError(t, draft.slots, slotsMin, rosterSize) : null;
 
   function payload(): Partial<RoomConfig> {
     const base: Partial<RoomConfig> = { ...draft };
@@ -1528,7 +1567,7 @@ function ConfigForm({ config }: { config: RoomConfig }) {
     >
       <label className="block">
         <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-          Nombre de la liga
+          {t('cfg.leagueName')}
         </span>
         <input
           value={draft.leagueName}
@@ -1538,14 +1577,14 @@ function ConfigForm({ config }: { config: RoomConfig }) {
         />
       </label>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {field('Créditos', draft.budget, (n) => setDraft({ ...draft, budget: n }), 1)}
-        {field('Timer puja (s)', draft.bidTimerSeconds, (n) => setDraft({ ...draft, bidTimerSeconds: n }), 2)}
-        {field('Timer llamada (s)', draft.callTimerSeconds, (n) => setDraft({ ...draft, callTimerSeconds: n }))}
-        {field('Incremento mín.', draft.minIncrement, (n) => setDraft({ ...draft, minIncrement: n }), 1)}
+        {field(t('cfg.credits'), draft.budget, (n) => setDraft({ ...draft, budget: n }), 1)}
+        {field(t('cfg.bidTimer'), draft.bidTimerSeconds, (n) => setDraft({ ...draft, bidTimerSeconds: n }), 2)}
+        {field(t('cfg.callTimer'), draft.callTimerSeconds, (n) => setDraft({ ...draft, callTimerSeconds: n }))}
+        {field(t('cfg.minIncrement'), draft.minIncrement, (n) => setDraft({ ...draft, minIncrement: n }), 1)}
       </div>
       <div className="grid grid-cols-4 gap-3">
         {ROLES.map((r) =>
-          field(`Cupos ${r}`, draft.slots[r], (n) =>
+          field(`${t('cfg.slotsByRole')} ${r}`, draft.slots[r], (n) =>
             setDraft({ ...draft, slots: { ...draft.slots, [r]: n } }),
           ),
         )}
@@ -1553,7 +1592,7 @@ function ConfigForm({ config }: { config: RoomConfig }) {
       <div className="flex flex-wrap items-end gap-4">
         <label className="block">
           <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-            Base de puja
+            {t('cfg.baseBid')}
           </span>
           <select
             value={draft.baseBidMode}
@@ -1562,13 +1601,13 @@ function ConfigForm({ config }: { config: RoomConfig }) {
             }
             className={`${inputCls} py-1.5`}
           >
-            <option value="fixed">Desde 1 crédito</option>
-            <option value="quotazione">Desde la quotazione</option>
+            <option value="fixed">{t('cfg.baseFixed')}</option>
+            <option value="quotazione">{t('cfg.baseQuota')}</option>
           </select>
         </label>
         <label className="block">
           <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-            ¿Quién llama?
+            {t('cfg.whoCalls')}
           </span>
           <select
             value={draft.callMode}
@@ -1577,13 +1616,13 @@ function ConfigForm({ config }: { config: RoomConfig }) {
             }
             className={`${inputCls} py-1.5`}
           >
-            <option value="admin">El banditore</option>
-            <option value="turns">Ronda de turnos</option>
+            <option value="admin">{t('cfg.callAdmin')}</option>
+            <option value="turns">{t('cfg.callTurns')}</option>
           </select>
         </label>
         <label className="block">
           <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-            Modo de oferta
+            {t('cfg.offerMode')}
           </span>
           <select
             value={draft.auctionMode}
@@ -1592,8 +1631,8 @@ function ConfigForm({ config }: { config: RoomConfig }) {
             }
             className={`${inputCls} py-1.5`}
           >
-            <option value="uno">+Uno (digital)</option>
-            <option value="premi_parla">Premi&amp;Parla (viva voz)</option>
+            <option value="uno">{t('cfg.modeUno')}</option>
+            <option value="premi_parla">{t('cfg.modePremi')}</option>
           </select>
         </label>
         <label className="flex items-center gap-2 pb-2 text-sm text-chalk">
@@ -1603,18 +1642,16 @@ function ConfigForm({ config }: { config: RoomConfig }) {
             onChange={(e) => setDraft({ ...draft, hideValues: e.target.checked })}
             className="h-4 w-4 accent-gold"
           />
-          Ocultar quotazioni durante el asta
+          {t('cfg.hideValuesLong')}
         </label>
       </div>
       <p className="text-xs text-chalk-faint">
-        {draft.auctionMode === 'uno'
-          ? 'Modo +Uno: cada pulsación lleva su monto, todo se resuelve en el celular.'
-          : 'Premi&Parla: el botón reserva la palabra, la oferta se canta de viva voz y vos fijás el monto.'}
+        {draft.auctionMode === 'uno' ? t('cfg.modeUnoHint') : t('cfg.modePremiHint')}
       </p>
 
       <details className="rounded-lg border chalk-line px-3 py-2" open={flexOn}>
         <summary className="cursor-pointer list-none text-[11px] font-semibold uppercase tracking-widest text-chalk-dim [&::-webkit-details-marker]:hidden">
-          Cupos flexibles (avanzado) ▾
+          {t('cfg.flexTitle')}
         </summary>
         <label className="mt-2 flex items-center gap-2 text-sm text-chalk">
           <input
@@ -1623,12 +1660,12 @@ function ConfigForm({ config }: { config: RoomConfig }) {
             onChange={(e) => setFlexOn(e.target.checked)}
             className="h-4 w-4 accent-gold"
           />
-          Usar mínimos y máximos por rol (estilo oficial)
+          {t('cfg.flexToggle')}
         </label>
         {flexOn && (
           <div className="mt-3">
             <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-              Mínimo por rol (el máximo es el cupo de arriba)
+              {t('cfg.flexMinLabel')}
             </p>
             <div className="grid grid-cols-4 gap-2">
               {ROLES.map((role) => (
@@ -1643,14 +1680,14 @@ function ConfigForm({ config }: { config: RoomConfig }) {
                       [role]: Math.max(0, Math.floor(Number(e.target.value)) || 0),
                     }))
                   }
-                  aria-label={`Mínimo de ${ROLE_NAMES[role]}`}
+                  aria-label={t('cfg.flexMinAria', { role: t(`role.${role}`) })}
                   className={`${inputCls} tabular py-1.5 text-center`}
                 />
               ))}
             </div>
             <label className="mt-3 block">
               <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-                Total de plantilla
+                {t('cfg.flexTotal')}
               </span>
               <input
                 type="number"
@@ -1672,7 +1709,7 @@ function ConfigForm({ config }: { config: RoomConfig }) {
         disabled={!dirty || flexError !== null}
         className="rounded-lg bg-gold px-4 py-2 font-display text-lg font-bold uppercase text-pitch-950 disabled:opacity-40"
       >
-        Guardar cambios
+        {t('admin.configSave')}
       </button>
     </form>
   );

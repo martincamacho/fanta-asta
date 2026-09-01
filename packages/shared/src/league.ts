@@ -3,6 +3,10 @@
  *
  * REST (cookie de sesión httpOnly, credenciales incluidas):
  *  POST /api/auth/register {email, name, password} → {user}          (crea sesión)
+ *  POST /api/auth/claim    {email, name} → {user} | 409 {needsPassword: true}
+ *      Identidad liviana: encuentra o crea el usuario SIN contraseña y abre sesión.
+ *      Si el email ya tiene contraseña, responde 409 needsPassword y la web pide login.
+ *  POST /api/auth/set-password {password} → 204                      (protege la cuenta; requiere sesión)
  *  POST /api/auth/login    {email, password} → {user}                (crea sesión)
  *  POST /api/auth/logout   → 204
  *  GET  /api/auth/me       → {user, leagues: LeagueSummary[]} | 401

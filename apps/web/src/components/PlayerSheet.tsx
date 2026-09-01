@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { Player } from '@fanta/shared';
-import { ROLE_NAMES } from '@fanta/shared';
 import { useProfile } from '../lib/profile';
+import { useT } from '../i18n';
 import { PlayerImg } from './PlayerImg';
 import { RoleBadge } from './RoleBadge';
 import { StatBadges } from './StatBadges';
@@ -9,6 +9,7 @@ import { StatBadges } from './StatBadges';
 /** Scheda del jugador estilo fantacalcio.it: card + badges MV/FM/FVM + datos + descripción. */
 export function PlayerSheet({ player, onClose }: { player: Player; onClose: () => void }) {
   const profile = useProfile(player.id);
+  const { t } = useT();
 
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -19,10 +20,10 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
   }, [onClose]);
 
   const rows: Array<[string, string | null]> = [
-    ['Altura', profile?.height ?? null],
-    ['Nacimiento', profile?.birthDate ?? null],
-    ['Pie', profile?.foot ?? null],
-    ['Nacionalidad', profile?.nationality ?? null],
+    [t('sheet.height'), profile?.height ?? null],
+    [t('sheet.birth'), profile?.birthDate ?? null],
+    [t('sheet.foot'), profile?.foot ?? null],
+    [t('sheet.nationality'), profile?.nationality ?? null],
   ];
   const hasData = rows.some(([, v]) => v !== null);
 
@@ -31,7 +32,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
       className="theme-light fixed inset-0 z-50 flex items-center justify-center bg-navy/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label={`Ficha de ${player.name}`}
+      aria-label={t('admin.fichaOf', { name: player.name })}
       onClick={onClose}
     >
       <div
@@ -47,7 +48,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
               {player.name}
             </h2>
             <p className="mt-1 text-sm text-chalk-dim">
-              {player.team} · {ROLE_NAMES[player.role]} · quot.{' '}
+              {player.team} · {t(`role.${player.role}`)} · {t('buzzer.quot')}{' '}
               <span className="tabular font-semibold text-white">{player.quotazione}</span>
             </p>
             <div className="mt-3">
@@ -57,7 +58,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
           <button
             type="button"
             onClick={onClose}
-            aria-label="Cerrar ficha"
+            aria-label={t('sheet.closeAria')}
             className="rounded-lg px-2 py-1 text-lg text-white/70 hover:bg-white/10 hover:text-white"
           >
             ✕
@@ -80,9 +81,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
             </dl>
           ) : (
             <p className="text-sm text-chalk-faint">
-              {profile === null
-                ? 'Ficha extendida no disponible — datos del listone solamente.'
-                : null}
+              {profile === null ? t('sheet.noProfile') : null}
             </p>
           )}
           {profile?.description && (
@@ -97,7 +96,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
               rel="noreferrer"
               className="mt-3 inline-block text-sm font-semibold text-gold underline decoration-dotted"
             >
-              Ver en fantacalcio.it ↗
+              {t('sheet.seeOn')}
             </a>
           )}
         </div>

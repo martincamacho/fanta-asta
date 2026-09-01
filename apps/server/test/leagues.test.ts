@@ -295,16 +295,41 @@ describe('ligas, invitaciones, astas y tickets', () => {
     expect((tAna.json() as { participantId: string }).participantId).not.toBe(ticket1.participantId);
   });
 
-  it('ticket en sala sin liga → 404; sala inexistente → 404', async () => {
+  it('ticket en sala SIN liga: alcanza con estar logueado, estable por (sala, usuario); sin sesión 401', async () => {
     const plain = await server.app.inject({ method: 'POST', url: '/api/rooms', payload: {} });
     const { code } = plain.json() as { code: string };
 
-    const noLeague = await server.app.inject({
+    // sin sesión sigue siendo 401
+    const anon = await server.app.inject({ method: 'GET', url: `/api/rooms/${code}/ticket` });
+    expect(anon.statusCode).toBe(401);
+
+    // con sesión: 200 aunque la sala no pertenezca a ninguna liga (flujo código/QR)
+    const t1 = await server.app.inject({
       method: 'GET',
       url: `/api/rooms/${code}/ticket`,
       cookies: beto.cookies,
     });
-    expect(noLeague.statusCode).toBe(404);
+    expect(t1.statusCode).toBe(200);
+    const ticket1 = t1.json() as { participantId: string; name: string };
+    expect(ticket1.name).toBe('Beto');
+    expect(ticket1.participantId).toMatch(/^[0-9a-f-]{36}$/);
+
+    // ESTABLE: mismo (sala, usuario) → mismo participantId
+    const t2 = await server.app.inject({
+      method: 'GET',
+      url: `/api/rooms/${code}/ticket`,
+      cookies: beto.cookies,
+    });
+    expect(t2.json()).toEqual(ticket1);
+
+    // otro usuario logueado (sin ninguna liga en común) → otro participantId, también 200
+    const tCarla = await server.app.inject({
+      method: 'GET',
+      url: `/api/rooms/${code}/ticket`,
+      cookies: carla.cookies,
+    });
+    expect(tCarla.statusCode).toBe(200);
+    expect((tCarla.json() as { participantId: string }).participantId).not.toBe(ticket1.participantId);
 
     // sala suelta: /api/rooms/:code sigue sin leagueId
     const info = await server.app.inject({ method: 'GET', url: `/api/rooms/${code}` });

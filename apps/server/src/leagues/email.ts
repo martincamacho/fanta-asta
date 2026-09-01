@@ -23,7 +23,7 @@ export async function sendInviteEmail(invite: InviteEmail): Promise<boolean> {
       body: JSON.stringify({
         from: process.env.MAIL_FROM ?? 'Fanta Asta <onboarding@resend.dev>',
         to: [invite.to],
-        subject: `Te invitaron a la liga ${invite.leagueName}`,
+        subject: `Sei stato invitato alla lega ${invite.leagueName}`,
         html: buildHtml(invite),
       }),
     });
@@ -37,14 +37,15 @@ function buildHtml({ leagueName, url }: InviteEmail): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-      <h2 style="margin: 0 0 8px;">⚽ Fanta-Asta</h2>
-      <p>Te invitaron a sumarte a la liga <strong>${esc(leagueName)}</strong>.</p>
+      <h2 style="margin: 0 0 8px;">⚽ Fanta Asta</h2>
+      <p>Unisciti alla lega <strong>${esc(leagueName)}</strong>: l'asta ti aspetta,
+         prepara la rosa e i crediti!</p>
       <p style="margin: 24px 0;">
         <a href="${url}" style="background: #16a34a; color: #fff; padding: 12px 24px;
-           border-radius: 8px; text-decoration: none; font-weight: bold;">Unirme a la liga</a>
+           border-radius: 8px; text-decoration: none; font-weight: bold;">Accetta l'invito</a>
       </p>
       <p style="color: #666; font-size: 13px;">
-        Si el botón no funciona, copiá este link en el navegador:<br>
+        Se il pulsante non funziona, copia questo link nel browser:<br>
         <a href="${url}">${url}</a>
       </p>
     </div>`;

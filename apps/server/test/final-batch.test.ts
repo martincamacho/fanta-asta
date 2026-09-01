@@ -407,7 +407,9 @@ describe('emails de invitación vía Resend', () => {
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer re_test_123');
     const body = JSON.parse(init.body as string) as { to: string[]; subject: string; html: string; from: string };
     expect(body.to).toEqual(['dos@test.com']);
-    expect(body.subject).toBe('Te invitaron a la liga Liga Resend');
+    expect(body.subject).toBe('Sei stato invitato alla lega Liga Resend');
+    expect(body.html).toContain('Unisciti alla lega');
+    expect(body.html).toContain("Accetta l'invito");
     expect(body.from).toBe('Fanta Asta <onboarding@resend.dev>');
     expect(body.html).toContain(`https://fanta.example/invitacion/${invites[0]?.token}`);
   });

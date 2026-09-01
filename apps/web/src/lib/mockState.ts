@@ -172,7 +172,7 @@ function doBid(participantId: string, amount: number): void {
   const check = validateBid(state, playersMap, participantId, amount);
   if (!check.ok) {
     if (participantId === selfId) {
-      useStore.getState().flashError({ code: check.reason, message: 'Oferta rechazada (mock)' });
+      useStore.getState().flashError({ code: check.reason, message: check.reason });
     }
     return;
   }

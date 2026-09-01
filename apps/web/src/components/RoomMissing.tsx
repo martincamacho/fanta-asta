@@ -1,20 +1,21 @@
 import { Link } from 'react-router-dom';
+import { useT } from '../i18n';
 
 export function RoomMissing({ code }: { code?: string }) {
+  const { t } = useT();
   return (
     <div className="pitch-bg flex min-h-dvh flex-col items-center justify-center gap-6 px-6 text-center">
       <p className="font-display text-6xl font-bold uppercase tracking-wide text-chalk-dim">
-        Fuera de juego
+        {t('missing.title')}
       </p>
       <p className="max-w-sm text-chalk-dim">
-        La sala {code ? <span className="font-semibold text-chalk">{code.toUpperCase()}</span> : null} no
-        existe o ya terminó. Revisá el código con el banditore.
+        {t('missing.text', { code: code?.toUpperCase() ?? '—' })}
       </p>
       <Link
         to="/"
         className="rounded-lg border chalk-line bg-pitch-800 px-6 py-3 font-display text-xl font-semibold uppercase tracking-wider text-chalk hover:bg-pitch-700"
       >
-        Volver al inicio
+        {t('missing.back')}
       </Link>
     </div>
   );
@@ -22,21 +23,20 @@ export function RoomMissing({ code }: { code?: string }) {
 
 /** Sala ligada a una liga de la que el usuario logueado no es miembro (403 del ticket). */
 export function NotLeagueMember({ leagueName }: { leagueName?: string }) {
+  const { t } = useT();
   return (
     <div className="pitch-bg flex min-h-dvh flex-col items-center justify-center gap-6 px-6 text-center">
       <p className="font-display text-6xl font-bold uppercase tracking-wide text-chalk-dim">
-        No sos miembro
+        {t('notMember.title')}
       </p>
       <p className="max-w-sm text-chalk-dim">
-        Esta asta pertenece a la liga{' '}
-        {leagueName ? <span className="font-semibold text-chalk">{leagueName}</span> : 'de otro grupo'}{' '}
-        y solo pueden entrar sus miembros. Pedile una invitación al admin.
+        {t('notMember.text', { league: leagueName ?? t('notMember.otherLeague') })}
       </p>
       <Link
         to="/ligas"
         className="rounded-lg border chalk-line bg-pitch-800 px-6 py-3 font-display text-xl font-semibold uppercase tracking-wider text-chalk hover:bg-pitch-700"
       >
-        Ir a mis ligas
+        {t('notMember.go')}
       </Link>
     </div>
   );

@@ -18,7 +18,8 @@ interface UserRow {
   id: string;
   email: string;
   name: string;
-  pass_hash: string;
+  /** null = cuenta "passwordless" creada por claim (identidad liviana por email). */
+  pass_hash: string | null;
 }
 
 interface LeagueRow {
@@ -53,7 +54,7 @@ export class LeagueStore {
         id TEXT PRIMARY KEY,
         email TEXT NOT NULL UNIQUE COLLATE NOCASE,
         name TEXT NOT NULL,
-        pass_hash TEXT NOT NULL,
+        pass_hash TEXT,
         created_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS sessions (
@@ -94,13 +95,51 @@ export class LeagueStore {
         PRIMARY KEY (room_code, user_id)
       );
     `);
+    this.migrateNullablePassHash();
+  }
+
+  /**
+   * Migración: bases creadas antes del modo passwordless tienen users.pass_hash
+   * NOT NULL — SQLite no permite quitar la restricción con ALTER, así que se
+   * recrea la tabla conservando los datos (los hashes existentes quedan).
+   */
+  private migrateNullablePassHash(): void {
+    const cols = this.db.pragma('table_info(users)') as Array<{ name: string; notnull: number }>;
+    const passHash = cols.find((c) => c.name === 'pass_hash');
+    if (!passHash || passHash.notnull === 0) return;
+    this.db.exec(`
+      BEGIN;
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        name TEXT NOT NULL,
+        pass_hash TEXT,
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO users_new (id, email, name, pass_hash, created_at)
+        SELECT id, email, name, pass_hash, created_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+      COMMIT;
+    `);
   }
 
   // ── Usuarios y sesiones ──────────────────────────────────────────────────
 
+  /**
+   * Registro clásico. Si el email ya existe CON contraseña → 'email_taken'.
+   * Si existe SIN contraseña (cuenta creada por claim), la ADOPTA: actualiza
+   * el nombre, setea la contraseña y la deja protegida.
+   */
   createUser(email: string, name: string, password: string): User | 'email_taken' {
-    const existing = this.db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (existing) return 'email_taken';
+    const existing = this.userRowByEmail(email);
+    if (existing) {
+      if (existing.pass_hash !== null) return 'email_taken';
+      this.db
+        .prepare('UPDATE users SET name = ?, pass_hash = ? WHERE id = ?')
+        .run(name, hashPassword(password), existing.id);
+      return { id: existing.id, email: existing.email, name };
+    }
     const id = randomUUID();
     this.db
       .prepare('INSERT INTO users (id, email, name, pass_hash, created_at) VALUES (?, ?, ?, ?, ?)')
@@ -108,12 +147,52 @@ export class LeagueStore {
     return { id, email, name };
   }
 
-  verifyLogin(email: string, password: string): User | null {
-    const row = this.db
-      .prepare('SELECT id, email, name, pass_hash FROM users WHERE email = ?')
-      .get(email) as UserRow | undefined;
-    if (!row || !verifyPassword(password, row.pass_hash)) return null;
+  /**
+   * Identidad liviana por email: encuentra o crea el usuario SIN contraseña.
+   * - email nuevo → crea (requiere name)
+   * - email sin contraseña → reusa (actualiza name si vino)
+   * - email protegido con contraseña → 'has_password' (la web pide login)
+   */
+  claimUser(email: string, name: string | undefined): User | 'has_password' | 'name_required' {
+    const existing = this.userRowByEmail(email);
+    if (existing) {
+      if (existing.pass_hash !== null) return 'has_password';
+      if (name) {
+        this.db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, existing.id);
+        return { id: existing.id, email: existing.email, name };
+      }
+      return toUser(existing);
+    }
+    if (!name) return 'name_required';
+    const id = randomUUID();
+    this.db
+      .prepare('INSERT INTO users (id, email, name, pass_hash, created_at) VALUES (?, ?, ?, NULL, ?)')
+      .run(id, email, name, this.now());
+    return { id, email, name };
+  }
+
+  /** Setea/cambia la contraseña (protege una cuenta passwordless). */
+  setPassword(userId: string, password: string): boolean {
+    const r = this.db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(hashPassword(password), userId);
+    return r.changes > 0;
+  }
+
+  /**
+   * Login clásico. 'passwordless' = la cuenta existe pero no tiene contraseña
+   * (que la web sugiera entrar directo con el email vía claim).
+   */
+  verifyLogin(email: string, password: string): User | 'passwordless' | null {
+    const row = this.userRowByEmail(email);
+    if (!row) return null;
+    if (row.pass_hash === null) return 'passwordless';
+    if (!verifyPassword(password, row.pass_hash)) return null;
     return toUser(row);
+  }
+
+  private userRowByEmail(email: string): UserRow | undefined {
+    return this.db.prepare('SELECT id, email, name, pass_hash FROM users WHERE email = ?').get(email) as
+      | UserRow
+      | undefined;
   }
 
   getUser(id: string): User | null {

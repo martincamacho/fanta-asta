@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 
-/** E2E multi-cliente contra el server real (ver playwright.config.ts). */
+/** E2E multi-cliente contra el server real (ver playwright.config.ts).
+ *  La UI está en italiano por defecto (sin localStorage 'fanta:lang'). */
 
 async function createRoom(
   request: APIRequestContext,
@@ -11,18 +12,36 @@ async function createRoom(
   return (await res.json()) as { code: string; adminToken: string };
 }
 
-/** Abre un buzzer en un context propio (un "celular") y entra con nombre de equipo. */
+/** Abre un buzzer en un context propio (un "celular") y entra por el flujo anónimo
+ *  ("Continua senza account"): solo nombre de equipo. */
 async function joinBuzzer(browser: Browser, code: string, name: string): Promise<Page> {
-  const ctx = await browser.newContext();
+  const ctx = await browser.newContext({ locale: 'it-IT' });
   const page = await ctx.newPage();
   await page.goto(`/sala/${code}`);
-  await page.getByPlaceholder('Nombre de equipo').fill(name);
-  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await page.getByRole('button', { name: 'Continua senza account' }).click();
+  await page.getByPlaceholder('Nome della squadra').fill(name);
+  await page.getByRole('button', { name: 'Entra', exact: true }).click();
+  return page;
+}
+
+/** Entra por el gate unificado con email (claim passwordless-lite). */
+async function joinWithEmail(
+  browser: Browser,
+  code: string,
+  email: string,
+  name: string,
+): Promise<Page> {
+  const ctx = await browser.newContext({ locale: 'it-IT' });
+  const page = await ctx.newPage();
+  await page.goto(`/sala/${code}`);
+  await page.getByPlaceholder('tu@esempio.com').fill(email);
+  await page.getByPlaceholder('Nome della squadra').fill(name);
+  await page.getByRole('button', { name: 'Entra', exact: true }).click();
   return page;
 }
 
 async function openAdmin(browser: Browser, code: string, adminToken: string): Promise<Page> {
-  const ctx = await browser.newContext();
+  const ctx = await browser.newContext({ locale: 'it-IT' });
   const page = await ctx.newPage();
   await page.goto('/');
   await page.evaluate(
@@ -36,7 +55,7 @@ async function openAdmin(browser: Browser, code: string, adminToken: string): Pr
 
 /** Llama un jugador desde el listone del admin. */
 async function callPlayer(admin: Page, playerName: string): Promise<void> {
-  await admin.getByPlaceholder(/Buscar jugador/).fill(playerName);
+  await admin.getByPlaceholder(/Cerca giocatore/).fill(playerName);
   await admin
     .locator('li')
     .filter({ hasText: playerName })
@@ -44,7 +63,7 @@ async function callPlayer(admin: Page, playerName: string): Promise<void> {
     .getByRole('button')
     .first()
     .click();
-  await admin.getByRole('button', { name: 'Llamar', exact: true }).click();
+  await admin.getByRole('button', { name: 'Chiama', exact: true }).click();
 }
 
 test('subasta completa: llamada, rilanci desde dos celulares, cierre y adjudicación', async ({
@@ -58,11 +77,11 @@ test('subasta completa: llamada, rilanci desde dos celulares, cierre y adjudicac
     joinBuzzer(browser, code, 'Bravo'),
     joinBuzzer(browser, code, 'Carlos'),
   ]);
-  await expect(alfa.getByText('Esperando la próxima llamada')).toBeVisible();
+  await expect(alfa.getByText('In attesa della prossima chiamata')).toBeVisible();
 
   const admin = await openAdmin(browser, code, adminToken);
   await expect(admin.locator('li').filter({ hasText: 'Alfa' }).first()).toBeVisible();
-  await expect(admin.getByText('Participantes · 3')).toBeVisible();
+  await expect(admin.getByText('Partecipanti · 3')).toBeVisible();
 
   await callPlayer(admin, 'Dimarco');
 
@@ -72,25 +91,25 @@ test('subasta completa: llamada, rilanci desde dos celulares, cierre y adjudicac
   }
 
   // Alfa abre con el mínimo (1); Bravo relanza (2).
-  await alfa.getByRole('button', { name: /Rilancio/ }).click();
-  await expect(alfa.getByText('Vas ganando')).toBeVisible();
-  await expect(bravo.getByText(/Rilancio/)).toBeVisible();
-  await bravo.getByRole('button', { name: /Rilancio/ }).click();
-  await expect(bravo.getByText('Vas ganando')).toBeVisible();
+  await alfa.getByRole('button', { name: /Rilancia/ }).click();
+  await expect(alfa.getByText('Stai vincendo')).toBeVisible();
+  await expect(bravo.getByText(/Rilancia/)).toBeVisible();
+  await bravo.getByRole('button', { name: /Rilancia/ }).click();
+  await expect(bravo.getByText('Stai vincendo')).toBeVisible();
 
   // El admin ve la oferta vigente de Bravo y cierra ya.
-  await expect(admin.getByText('Historial de ofertas')).toBeVisible();
-  await admin.getByRole('button', { name: /Cerrar ya/ }).click();
+  await expect(admin.getByText('Storico delle offerte')).toBeVisible();
+  await admin.getByRole('button', { name: /Chiudi ora/ }).click();
 
   // Adjudicación visible en las tres pantallas.
-  await expect(bravo.getByText('¡Es tuyo!')).toBeVisible();
-  await expect(alfa.getByText('¡Vendido!')).toBeVisible();
+  await expect(bravo.getByText('È tuo!')).toBeVisible();
+  await expect(alfa.getByText('Venduto!')).toBeVisible();
   await expect(alfa.getByText(/Bravo/)).toBeVisible();
-  await expect(carlos.getByText('¡Vendido!')).toBeVisible();
+  await expect(carlos.getByText('Venduto!')).toBeVisible();
 
   // Créditos actualizados en el panel del admin: Bravo pagó 2 → 498.
   const card = (name: string) =>
-    admin.locator('li').filter({ hasText: 'cupos' }).filter({ hasText: name }).first();
+    admin.locator('li').filter({ hasText: 'slot' }).filter({ hasText: name }).first();
   await expect(card('Bravo').getByText('498')).toBeVisible();
   await expect(card('Alfa').getByText('500')).toBeVisible();
 });
@@ -104,13 +123,31 @@ test('pausa y reanudación visibles en el buzzer', async ({ browser, request }) 
   await expect(buzzer.getByRole('heading', { name: 'Bastoni' })).toBeVisible();
 
   // Primera oferta para entrar en fase de puja, después pausa.
-  await buzzer.getByRole('button', { name: /Rilancio/ }).click();
-  await admin.getByRole('button', { name: 'Pausar', exact: true }).click();
-  await expect(buzzer.getByText('Pausada por el banditore')).toBeVisible();
+  await buzzer.getByRole('button', { name: /Rilancia/ }).click();
+  await admin.getByRole('button', { name: 'Pausa', exact: true }).click();
+  await expect(buzzer.getByText('In pausa dal banditore')).toBeVisible();
 
-  await admin.getByRole('button', { name: 'Reanudar', exact: true }).click();
-  await expect(buzzer.getByText('Pausada por el banditore')).toHaveCount(0);
-  await expect(buzzer.getByText('Cierra en')).toBeVisible();
+  await admin.getByRole('button', { name: 'Riprendi', exact: true }).click();
+  await expect(buzzer.getByText('In pausa dal banditore')).toHaveCount(0);
+  await expect(buzzer.getByText('Chiude tra')).toBeVisible();
+});
+
+test('claim por email: el mismo equipo vuelve desde otro dispositivo', async ({
+  browser,
+  request,
+}) => {
+  const { code } = await createRoom(request);
+  const email = `claim-${Date.now()}@test.com`;
+
+  // Dispositivo 1: entra con email + nombre de equipo (crea la cuenta passwordless).
+  const uno = await joinWithEmail(browser, code, email, 'La Remontada');
+  await expect(uno.getByText('La mia squadra · La Remontada')).toBeVisible();
+  await uno.context().close();
+
+  // Dispositivo 2 (context limpio): mismo email → mismo equipo, aunque tipee otro nombre.
+  const dos = await joinWithEmail(browser, code, email, 'Otro Nombre');
+  await expect(dos.getByText('La mia squadra · La Remontada')).toBeVisible();
+  await dos.context().close();
 });
 
 test('modo turnos: sorteo, el turno llama y fuera de turno no puede', async ({
@@ -122,13 +159,13 @@ test('modo turnos: sorteo, el turno llama y fuera de turno no puede', async ({
   const dos = await joinBuzzer(browser, code, 'Equipo Dos');
   const admin = await openAdmin(browser, code, adminToken);
 
-  await expect(admin.getByText('Ronda de llamadas')).toBeVisible();
-  await expect(admin.getByText('Participantes · 2')).toBeVisible();
-  await admin.getByRole('button', { name: 'Sortear orden', exact: true }).click();
+  await expect(admin.getByRole('heading', { name: 'Giro di chiamata' })).toBeVisible();
+  await expect(admin.getByText('Partecipanti · 2')).toBeVisible();
+  await admin.getByRole('button', { name: "Sorteggia l'ordine", exact: true }).click();
 
   // Exactamente uno de los dos buzzers tiene el turno de llamar.
-  const turnoUno = uno.getByText('¡Te toca llamar!');
-  const turnoDos = dos.getByText('¡Te toca llamar!');
+  const turnoUno = uno.getByText('Tocca a te chiamare!');
+  const turnoDos = dos.getByText('Tocca a te chiamare!');
   await expect
     .poll(async () => (await turnoUno.isVisible()) || (await turnoDos.isVisible()), {
       timeout: 10_000,
@@ -138,14 +175,14 @@ test('modo turnos: sorteo, el turno llama y fuera de turno no puede', async ({
   const conTurno = unoTiene ? uno : dos;
   const sinTurno = unoTiene ? dos : uno;
 
-  await expect(sinTurno.getByText('Turno de llamada')).toBeVisible();
-  await expect(sinTurno.getByText('¡Te toca llamar!')).toHaveCount(0);
-  await expect(sinTurno.getByPlaceholder(/Buscar jugador/)).toHaveCount(0);
+  await expect(sinTurno.getByText('Turno di chiamata')).toBeVisible();
+  await expect(sinTurno.getByText('Tocca a te chiamare!')).toHaveCount(0);
+  await expect(sinTurno.getByPlaceholder(/Cerca giocatore/)).toHaveCount(0);
 
   // El del turno elige un jugador desde el celular y lo llama.
-  await conTurno.getByPlaceholder(/Buscar jugador/).fill('Maignan');
+  await conTurno.getByPlaceholder(/Cerca giocatore/).fill('Maignan');
   await conTurno.getByRole('button', { name: /Maignan/ }).first().click();
-  await conTurno.getByRole('button', { name: 'Llamar a subasta' }).click();
+  await conTurno.getByRole('button', { name: "Chiama all'asta" }).click();
 
   // Arranca la subasta en los dos celulares.
   await expect(sinTurno.getByRole('heading', { name: 'Maignan' })).toBeVisible();

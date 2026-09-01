@@ -4,6 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { budgetRemaining, type Participant, type RoomState } from '@fanta/shared';
 import { useStore } from '../store';
 import { useAuth } from '../authStore';
+import { useT } from '../i18n';
 import { joinRoom, leaveRoom } from '../lib/socket';
 import { loadPlayers } from '../lib/api';
 import { getRoomTicket } from '../lib/leagueApi';
@@ -19,6 +20,7 @@ import { PlayerImg } from '../components/PlayerImg';
 import { RoleBadge } from '../components/RoleBadge';
 import { NotLeagueMember, RoomMissing } from '../components/RoomMissing';
 import { AssignmentsPanel } from '../components/AssignmentsPanel';
+import { LangSwitcher } from '../components/LangSwitcher';
 import { SoundToggle } from '../components/SoundToggle';
 import { StatBadges } from '../components/StatBadges';
 
@@ -27,6 +29,7 @@ export default function Board() {
   const guard = useRoomGuard(code);
   const authStatus = useAuth((s) => s.status);
   const state = useStore((s) => s.state);
+  const { t } = useT();
   const [gate, setGate] = useState<'resolving' | 'ok' | 'forbidden'>('resolving');
   const soundPref = useSoundPref('board');
   useAuctionSounds(state, soundPref.enabled, { bidBlip: true });
@@ -85,23 +88,34 @@ export default function Board() {
   if (guard.status === 'ok' && gate === 'forbidden')
     return <NotLeagueMember leagueName={guard.leagueName} />;
   if (guard.status === 'checking')
-    return <div className="pitch-bg flex min-h-dvh items-center justify-center text-2xl text-chalk-dim">Buscando la sala…</div>;
+    return (
+      <div className="pitch-bg flex min-h-dvh items-center justify-center text-2xl text-chalk-dim">
+        {t('board.searching')}
+      </div>
+    );
   if (guard.status === 'missing') return <RoomMissing code={code} />;
   if (!state)
-    return <div className="pitch-bg flex min-h-dvh items-center justify-center text-2xl text-chalk-dim">Conectando…</div>;
+    return (
+      <div className="pitch-bg flex min-h-dvh items-center justify-center text-2xl text-chalk-dim">
+        {t('board.connecting')}
+      </div>
+    );
 
   return (
     <div className="pitch-bg flex h-dvh flex-col overflow-hidden">
       <header className="flex items-baseline justify-between border-b chalk-line px-8 py-3">
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-chalk">
           {state.config.leagueName}
-          {guard.status === 'ok' && guard.leagueName && guard.leagueName !== state.config.leagueName && (
-            <span className="ml-3 align-middle text-sm font-body font-semibold uppercase tracking-widest text-chalk-dim">
-              Liga: {guard.leagueName}
-            </span>
-          )}
+          {guard.status === 'ok' &&
+            guard.leagueName &&
+            guard.leagueName !== state.config.leagueName && (
+              <span className="ml-3 align-middle text-sm font-body font-semibold uppercase tracking-widest text-chalk-dim">
+                {t('board.league', { name: guard.leagueName })}
+              </span>
+            )}
         </h1>
         <div className="flex items-center gap-4">
+          <LangSwitcher compact />
           <SoundToggle enabled={soundPref.enabled} onToggle={soundPref.toggle} />
           <p className="font-display text-3xl font-bold uppercase tracking-[0.35em] text-gold">
             {state.code}
@@ -127,10 +141,11 @@ export default function Board() {
 /** Overlay del sorteo: los equipos se revelan uno por uno en su posición (puesta en escena;
  *  el orden ya viene decidido en el evento). Se cierra solo. */
 function DrawOverlay({ state, order }: { state: RoomState; order: string[] }) {
+  const { t } = useT();
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-8 bg-[hsl(230_28%_8%/0.94)] px-10 backdrop-blur-sm">
       <p className="animate-rise font-display text-6xl font-bold uppercase tracking-wide text-white">
-        Sorteo del <span className="text-secondary">orden</span>
+        {t('board.drawTitle1')} <span className="text-secondary">{t('board.drawTitle2')}</span>
       </p>
       <ol className="flex max-w-5xl flex-wrap items-center justify-center gap-4">
         {order.map((id, i) => (
@@ -139,7 +154,9 @@ function DrawOverlay({ state, order }: { state: RoomState; order: string[] }) {
             className="animate-rise flex items-center gap-3 rounded-2xl border-2 border-primary/60 bg-pitch-800 px-6 py-4"
             style={{ animationDelay: `${0.4 + i * 0.6}s`, animationDuration: '0.45s' }}
           >
-            <span className="font-display text-4xl font-bold text-secondary">{i + 1}º</span>
+            <span className="font-display text-4xl font-bold text-secondary">
+              {t('board.pos', { n: i + 1 })}
+            </span>
             <span className="max-w-[16rem] truncate font-display text-3xl font-semibold text-chalk">
               {participantName(state, id)}
             </span>
@@ -150,7 +167,7 @@ function DrawOverlay({ state, order }: { state: RoomState; order: string[] }) {
         className="animate-rise text-sm uppercase tracking-[0.3em] text-chalk-dim"
         style={{ animationDelay: `${0.4 + order.length * 0.6}s` }}
       >
-        Llama primero: {participantName(state, order[0])}
+        {t('board.drawFirst', { name: participantName(state, order[0]) })}
       </p>
     </div>
   );
@@ -159,13 +176,14 @@ function DrawOverlay({ state, order }: { state: RoomState; order: string[] }) {
 /* ————— idle: código + QR + participantes ————— */
 
 function BoardIdle({ state }: { state: RoomState }) {
+  const { t } = useT();
   const callerId = currentCallerId(state);
   return (
     <div className="grid h-full grid-cols-[minmax(20rem,2fr)_3fr] items-center gap-8 px-10">
       <div className="flex flex-col items-center gap-6 text-center">
         {callerId && (
           <p className="animate-rise rounded-xl bg-primary px-5 py-2 font-display text-3xl font-bold uppercase text-white">
-            Llama: {participantName(state, callerId)}
+            {t('board.calls', { name: participantName(state, callerId) })}
           </p>
         )}
         {state.callOrder.length > 0 && (
@@ -185,10 +203,10 @@ function BoardIdle({ state }: { state: RoomState }) {
           </ol>
         )}
         <p className="text-lg font-semibold uppercase tracking-[0.4em] text-chalk-dim">
-          Entrá con tu celular
+          {t('board.enterWithPhone')}
         </p>
         <div className="rounded-2xl bg-chalk p-5">
-          <QRCodeSVG value={buzzerUrl(state.code)} size={230} bgColor="#ecf1ed" fgColor="#050b08" />
+          <QRCodeSVG value={buzzerUrl(state.code)} size={230} bgColor="#eef0f7" fgColor="#131627" />
         </div>
         <p className="font-display text-[6rem] font-bold uppercase leading-none tracking-[0.25em] text-gold">
           {state.code}
@@ -197,10 +215,10 @@ function BoardIdle({ state }: { state: RoomState }) {
       </div>
       <div className="max-h-full overflow-y-auto py-8">
         <p className="mb-4 text-sm font-semibold uppercase tracking-[0.3em] text-chalk-dim">
-          Equipos en la sala · {state.participants.length}
+          {t('board.teamsInRoom', { n: state.participants.length })}
         </p>
         {state.participants.length === 0 ? (
-          <p className="text-2xl text-chalk-faint">Todavía no entró nadie…</p>
+          <p className="text-2xl text-chalk-faint">{t('board.nobodyYet')}</p>
         ) : (
           <ul className="grid grid-cols-2 gap-3 xl:grid-cols-3">
             {state.participants.map((p) => (
@@ -241,6 +259,7 @@ function BoardIdle({ state }: { state: RoomState }) {
 function BoardAuction({ state }: { state: RoomState }) {
   const players = useStore((s) => s.players);
   const eventSeq = useStore((s) => s.eventSeq);
+  const { t } = useT();
   const player = state.auction.playerId !== null ? players.get(state.auction.playerId) : undefined;
   const profile = useProfile(state.config.hideValues ? null : (player?.id ?? null));
   if (!player) return null;
@@ -261,7 +280,7 @@ function BoardAuction({ state }: { state: RoomState }) {
             {!state.config.hideValues && (
               <>
                 {' '}
-                · quotazione{' '}
+                · {t('board.quotazione')}{' '}
                 <span className="tabular font-semibold text-chalk">{player.quotazione}</span>
               </>
             )}
@@ -275,7 +294,7 @@ function BoardAuction({ state }: { state: RoomState }) {
         <PlayerImg player={player} className="w-[clamp(12rem,20vw,20rem)] shrink-0" />
       </div>
 
-      {/* countdown: círculo central de la cancha */}
+      {/* countdown */}
       <div className="flex flex-col items-center gap-4">
         <CountdownRing
           deadline={phase === 'sold' || phase === 'unsold' ? null : state.auction.deadline}
@@ -290,10 +309,13 @@ function BoardAuction({ state }: { state: RoomState }) {
         {phase === 'sold' ? (
           <div className="animate-sold">
             <p className="font-display text-[clamp(3rem,6vw,6rem)] font-bold uppercase leading-none text-gold animate-ticker-glow">
-              ¡Vendido!
+              {t('board.sold')}
             </p>
             <p className="mt-4 text-3xl text-chalk">
-              a <span className="font-display font-bold">{participantName(state, state.auction.winnerId)}</span>
+              {t('board.soldTo')}{' '}
+              <span className="font-display font-bold">
+                {participantName(state, state.auction.winnerId)}
+              </span>
             </p>
             <p className="tabular mt-2 font-display text-[clamp(4rem,8vw,8rem)] font-bold leading-none text-gold">
               {bid?.amount ?? 0}
@@ -302,14 +324,14 @@ function BoardAuction({ state }: { state: RoomState }) {
         ) : phase === 'unsold' ? (
           <div className="animate-rise">
             <p className="font-display text-[clamp(3rem,6vw,6rem)] font-bold uppercase leading-none text-chalk-dim">
-              Desierto
+              {t('board.unsold')}
             </p>
-            <p className="mt-3 text-2xl text-chalk-faint">Va a la lista de richiama</p>
+            <p className="mt-3 text-2xl text-chalk-faint">{t('board.unsoldText')}</p>
           </div>
         ) : (
           <>
             <p className="text-sm font-semibold uppercase tracking-[0.3em] text-chalk-dim">
-              {state.config.auctionMode === 'premi_parla' ? 'Palabra' : 'Oferta vigente'}
+              {state.config.auctionMode === 'premi_parla' ? t('board.word') : t('board.currentBid')}
             </p>
             {bid ? (
               <>
@@ -325,7 +347,7 @@ function BoardAuction({ state }: { state: RoomState }) {
               </>
             ) : (
               <p className="mt-2 font-display text-5xl font-semibold uppercase text-chalk-faint">
-                ¿Quién abre?
+                {t('board.whoOpens')}
               </p>
             )}
             <BidFeed state={state} />
@@ -355,13 +377,14 @@ function BidFeed({ state }: { state: RoomState }) {
 
 function BoardFinished({ state }: { state: RoomState }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
   const teams = [...state.participants].sort(
     (a, b) => budgetRemaining(a, state.config) - budgetRemaining(b, state.config),
   );
   return (
     <div className="flex h-full flex-col overflow-hidden px-10 py-6">
       <p className="animate-sold text-center font-display text-[clamp(3rem,6vw,6rem)] font-bold uppercase leading-none text-gold animate-ticker-glow">
-        ¡Asta terminada!
+        {t('board.finished')}
       </p>
       <div className="mt-6 min-h-0 flex-1 overflow-y-auto">
         <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -388,7 +411,7 @@ function BoardFinished({ state }: { state: RoomState }) {
                   );
                 })}
                 {p.roster.length === 0 && (
-                  <li className="text-sm text-chalk-faint">Sin compras</li>
+                  <li className="text-sm text-chalk-faint">{t('board.noBuys')}</li>
                 )}
               </ul>
             </li>

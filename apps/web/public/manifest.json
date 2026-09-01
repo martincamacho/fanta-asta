@@ -1,7 +1,8 @@
 {
   "name": "Fanta Asta",
   "short_name": "Fanta Asta",
-  "description": "Subasta de fantacalcio en vivo: tu celular es el pulsador.",
+  "description": "Asta live del fantacalcio: il tuo telefono è il pulsante.",
+  "lang": "it",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#2d3450",

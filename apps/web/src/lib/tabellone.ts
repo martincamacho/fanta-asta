@@ -1,6 +1,7 @@
 /** Tabellone final como imagen PNG, renderizado client-side en canvas
  *  (estilo fantacalcio: navy, azul primary, naranja para la plata). */
 import { budgetRemaining, spent, type Player, type Role, type RoomState } from '@fanta/shared';
+import { getLocale, translate } from '../i18n';
 
 const ROLE_FILL: Record<Role, string> = {
   P: 'hsl(41 100% 49%)',
@@ -55,7 +56,7 @@ export function downloadTabellone(state: RoomState, players: ReadonlyMap<number,
   ctx.fillStyle = 'hsl(228 20% 70%)';
   ctx.font = "16px 'Space Grotesk', system-ui, sans-serif";
   ctx.fillText(
-    `${state.config.leagueName} · sala ${state.code} · ${new Date().toLocaleDateString('es-AR')}`,
+    `${state.config.leagueName} · ${state.code} · ${new Date().toLocaleDateString(getLocale())}`,
     MARGIN,
     84,
   );
@@ -96,9 +97,13 @@ export function downloadTabellone(state: RoomState, players: ReadonlyMap<number,
     ctx.fillStyle = 'hsl(228 20% 70%)';
     ctx.font = "13px 'Space Grotesk', system-ui, sans-serif";
     const bonus = team.budgetBonus !== 0
-      ? ` · bonus ${team.budgetBonus > 0 ? '+' : '−'}${Math.abs(team.budgetBonus)}`
+      ? ` · ${translate(team.budgetBonus > 0 ? 'admin.bonusWord' : 'admin.malusWord').toLowerCase()} ${team.budgetBonus > 0 ? '+' : '−'}${Math.abs(team.budgetBonus)}`
       : '';
-    ctx.fillText(`${team.roster.length} jugadores · gastó ${spent(team)}${bonus}`, x + 16, y + 54);
+    ctx.fillText(
+      `${team.roster.length} · ${translate('cfg.credits').toLowerCase()}: −${spent(team)}${bonus}`,
+      x + 16,
+      y + 54,
+    );
     ctx.strokeStyle = 'hsl(228 40% 95% / 0.12)';
     ctx.beginPath();
     ctx.moveTo(x + 12, y + 64);

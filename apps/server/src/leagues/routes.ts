@@ -74,15 +74,55 @@ export function registerLeagueRoutes(app: FastifyInstance, { store, manager }: D
     return { user };
   });
 
+  /**
+   * Identidad liviana ("passwordless-lite"): encuentra o crea el usuario por
+   * email SIN contraseña y abre sesión. Si el email está protegido con
+   * contraseña → 409 needsPassword (la web pide login normal).
+   */
+  app.post('/api/auth/claim', async (req, reply) => {
+    const body = (req.body ?? {}) as { email?: unknown; name?: unknown };
+    const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const rawName = typeof body.name === 'string' ? body.name.trim() : '';
+
+    if (!EMAIL_RE.test(email)) return fail(reply, 400, 'Email inválido');
+
+    const result = store.claimUser(email, rawName || undefined);
+    if (result === 'has_password') {
+      return reply
+        .code(409)
+        .send({ error: 'Ese email ya tiene una cuenta con contraseña: iniciá sesión', needsPassword: true });
+    }
+    if (result === 'name_required') return fail(reply, 400, 'Falta el nombre');
+    setSession(reply, result.id);
+    return { user: result };
+  });
+
+  /** Protege la cuenta: setea/cambia la contraseña del usuario logueado. */
+  app.post('/api/auth/set-password', async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return reply;
+    const body = (req.body ?? {}) as { password?: unknown };
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (password.length < 6) return fail(reply, 400, 'La contraseña debe tener al menos 6 caracteres');
+    store.setPassword(user.id, password);
+    return reply.code(204).send();
+  });
+
   app.post('/api/auth/login', async (req, reply) => {
     const body = (req.body ?? {}) as { email?: unknown; password?: unknown };
     const email = typeof body.email === 'string' ? body.email.trim() : '';
     const password = typeof body.password === 'string' ? body.password : '';
 
-    const user = store.verifyLogin(email, password);
-    if (!user) return fail(reply, 401, 'Email o contraseña incorrectos');
-    setSession(reply, user.id);
-    return { user };
+    const result = store.verifyLogin(email, password);
+    if (result === 'passwordless') {
+      // Distinguible para la web: esta cuenta entra directo con el email (claim).
+      return reply
+        .code(401)
+        .send({ error: 'Esta cuenta no tiene contraseña: entrá directo con tu email', passwordless: true });
+    }
+    if (!result) return fail(reply, 401, 'Email o contraseña incorrectos');
+    setSession(reply, result.id);
+    return { user: result };
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
@@ -221,10 +261,13 @@ export function registerLeagueRoutes(app: FastifyInstance, { store, manager }: D
     if (!user) return reply;
     const code = (req.params as { code: string }).code.toUpperCase();
     if (!manager.getRoom(code)) return fail(reply, 404, 'La sala no existe');
+    // Salas de liga: exigen membresía. Salas "sueltas" (código/QR): alcanza con
+    // estar logueado — el equipo queda atado a la cuenta y se reconecta desde
+    // cualquier dispositivo.
     const league = store.leagueForRoom(code);
-    // Salas sin liga: el flujo por código de siempre, acá no hay ticket.
-    if (!league) return fail(reply, 404, 'Esta sala no pertenece a ninguna liga');
-    if (!store.isMember(league.id, user.id)) return fail(reply, 403, 'No sos miembro de la liga de esta sala');
+    if (league && !store.isMember(league.id, user.id)) {
+      return fail(reply, 403, 'No sos miembro de la liga de esta sala');
+    }
 
     return { participantId: store.getOrCreateTicket(code, user.id), name: user.name };
   });

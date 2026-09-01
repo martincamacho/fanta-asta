@@ -1,4 +1,5 @@
 import { formatCountdown, useCountdown } from '../lib/useCountdown';
+import { useT } from '../i18n';
 
 /** El círculo central de la cancha, dibujado en tiza, que se borra con el tiempo.
  *  Rojo y pulsante bajo 2 segundos. Sin deadline: círculo completo, quieto. */
@@ -14,6 +15,7 @@ export function CountdownRing({
   pausedMs?: number | null;
   className?: string;
 }) {
+  const { t } = useT();
   const { remainingMs, fraction, active } = useCountdown(deadline, durationMs);
   const R = 54;
   const C = 2 * Math.PI * R;
@@ -38,10 +40,10 @@ export function CountdownRing({
       role="timer"
       aria-label={
         paused
-          ? `Pausada con ${formatCountdown(shownMs)} restantes`
+          ? t('count.pausedRemaining', { time: formatCountdown(shownMs) })
           : deadline === null
-            ? 'Sin límite de tiempo'
-            : `${formatCountdown(shownMs)} restantes`
+            ? t('count.noLimit')
+            : t('count.remaining', { time: formatCountdown(shownMs) })
       }
     >
       <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
@@ -73,7 +75,7 @@ export function CountdownRing({
         </span>
         {paused && (
           <span className="mt-1 text-[8cqw] font-semibold uppercase tracking-[0.3em] text-gold">
-            Pausa
+            {t('count.pause')}
           </span>
         )}
       </div>
