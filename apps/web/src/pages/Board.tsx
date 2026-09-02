@@ -262,6 +262,15 @@ function BanditoreColumn({ state }: { state: RoomState }) {
   const paused = state.auction.pausedRemainingMs !== null;
   const premi = state.config.auctionMode === 'premi_parla';
 
+  // Situación del mejor postor (solo modo digital): restantes, post-oferta y % del budget total.
+  const bidder = bid ? state.participants.find((p) => p.id === bid.participantId) : undefined;
+  const bidderRemaining = bidder ? budgetRemaining(bidder, state.config) : 0;
+  const bidderBudgetTotal = bidder ? state.config.budget + (bidder.budgetBonus ?? 0) : 0;
+  const bidPct =
+    bid && bidderBudgetTotal > 0
+      ? Math.max(1, Math.round((bid.amount / bidderBudgetTotal) * 100))
+      : null;
+
   return (
     <Column title={t('board.colBanditore')}>
       <div className="flex h-full flex-col items-center justify-center gap-6">
@@ -329,6 +338,15 @@ function BanditoreColumn({ state }: { state: RoomState }) {
                   <p className="mt-1 truncate font-display text-3xl font-semibold text-chalk">
                     {participantName(state, bid.participantId)}
                   </p>
+                  {bidder && (
+                    <p className="tabular mt-1 truncate text-lg text-chalk-faint">
+                      {t('buzzer.bidderCredits', {
+                        n: bidderRemaining,
+                        m: bidderRemaining - bid.amount,
+                      })}
+                      {bidPct !== null && <> · {t('buzzer.pctOfBudget', { n: bidPct })}</>}
+                    </p>
+                  )}
                 </>
               )
             ) : (

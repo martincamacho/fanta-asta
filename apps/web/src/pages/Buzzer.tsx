@@ -587,6 +587,15 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
   /** Premi&Parla: el botón solo reserva la palabra; el monto se canta de viva voz. */
   const premi = state.config.auctionMode === 'premi_parla';
 
+  // Situación del mejor postor: créditos restantes, qué le quedaría y % de su budget total.
+  const bidder = bid ? state.participants.find((p) => p.id === bid.participantId) : undefined;
+  const bidderRemaining = bidder ? budgetRemaining(bidder, state.config) : 0;
+  const bidderBudgetTotal = bidder ? state.config.budget + (bidder.budgetBonus ?? 0) : 0;
+  const bidPct =
+    bid && bidderBudgetTotal > 0
+      ? Math.max(1, Math.round((bid.amount / bidderBudgetTotal) * 100))
+      : null;
+
   // room:error → toast localizado por código + sacudida del botón
   useEffect(() => {
     if (errorSeq === 0 || !lastError) return;
@@ -658,19 +667,36 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
               {premi ? t('buzzer.word') : t('buzzer.currentBid')}
             </p>
             {bid ? (
-              <p className="truncate text-sm text-chalk">
-                {iAmWinning ? t('buzzer.yourBid') : participantName(state, bid.participantId)}
-              </p>
+              <>
+                <p className="truncate text-sm text-chalk">
+                  {iAmWinning ? t('buzzer.yourBid') : participantName(state, bid.participantId)}
+                </p>
+                {!premi && bidder && (
+                  <p className="tabular truncate text-[11px] text-chalk-faint">
+                    {t('buzzer.bidderCredits', {
+                      n: bidderRemaining,
+                      m: bidderRemaining - bid.amount,
+                    })}
+                  </p>
+                )}
+              </>
             ) : (
               <p className="text-sm text-chalk-faint">{t('buzzer.noBidsYet')}</p>
             )}
           </div>
-          <span
-            key={eventSeq}
-            className="tabular animate-bid-pop font-display text-6xl font-bold leading-none text-gold"
-          >
-            {bid ? bid.amount : '—'}
-          </span>
+          <div className="flex shrink-0 flex-col items-end">
+            <span
+              key={eventSeq}
+              className="tabular animate-bid-pop font-display text-6xl font-bold leading-none text-gold"
+            >
+              {bid ? bid.amount : '—'}
+            </span>
+            {!premi && bid && bidPct !== null && (
+              <span className="tabular mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-chalk-faint">
+                {t('buzzer.pctOfBudget', { n: bidPct })}
+              </span>
+            )}
+          </div>
         </div>
 
         <CountdownBar state={state} />
