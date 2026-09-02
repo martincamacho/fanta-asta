@@ -26,19 +26,13 @@ function isLang(v: unknown): v is Lang {
   return v === 'it' || v === 'en' || v === 'es';
 }
 
-/** localStorage > navigator.language (it/en/es) > 'it'. */
+/** Italiano SIEMPRE por defecto; otro idioma solo si el usuario lo eligió con el selector (localStorage). */
 export function detectLang(): Lang {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (isLang(stored)) return stored;
   } catch {
     /* sin storage */
-  }
-  try {
-    const nav = navigator.language?.slice(0, 2).toLowerCase();
-    if (isLang(nav)) return nav;
-  } catch {
-    /* sin navigator */
   }
   return 'it';
 }
