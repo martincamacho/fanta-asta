@@ -334,18 +334,21 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
         soundEnabled={soundPref.enabled}
         onToggleSound={soundPref.toggle}
       />
-      {state.finishedAt !== null ? (
-        <FinishedBody state={state} meId={me.id} />
-      ) : state.auction.phase === 'idle' || !player ? (
-        <IdleBody state={state} meId={me.id} />
-      ) : state.auction.phase === 'sold' ? (
-        <SoldBody state={state} player={player} meId={me.id} />
-      ) : state.auction.phase === 'unsold' ? (
-        <UnsoldBody player={player} />
-      ) : (
-        <AuctionBody state={state} player={player} meId={me.id} />
-      )}
-      <BottomTabs state={state} meId={me.id} />
+      {/* Móvil-first; en monitores anchos el contenido queda centrado y contenido. */}
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col">
+        {state.finishedAt !== null ? (
+          <FinishedBody state={state} meId={me.id} />
+        ) : state.auction.phase === 'idle' || !player ? (
+          <IdleBody state={state} meId={me.id} />
+        ) : state.auction.phase === 'sold' ? (
+          <SoldBody state={state} player={player} meId={me.id} />
+        ) : state.auction.phase === 'unsold' ? (
+          <UnsoldBody player={player} />
+        ) : (
+          <AuctionBody state={state} player={player} meId={me.id} />
+        )}
+        <BottomTabs state={state} meId={me.id} />
+      </div>
     </div>
   );
 }
@@ -975,7 +978,7 @@ function BottomTabs({ state, meId }: { state: RoomState; meId: string }) {
           </button>
         ))}
       </div>
-      <div role="tabpanel" aria-label={activeLabel} className="mt-3">
+      <div role="tabpanel" aria-label={activeLabel} className="mt-3 rounded-2xl bg-pitch-950/70 p-4">
         {tab === 'rosa' ? (
           <MyRoseTab state={state} meId={meId} />
         ) : tab === 'squadre' ? (
@@ -1114,7 +1117,7 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
   return (
     <div>
       {/* barra de búsqueda/filtros, sticky al scrollear la pestaña */}
-      <div className="sticky top-0 z-10 -mx-4 space-y-2 bg-[hsl(250_92%_52%/0.92)] px-4 pb-2 pt-1 backdrop-blur-md">
+      <div className="sticky top-0 z-10 -mx-2 space-y-2 rounded-xl bg-[hsl(251_62%_11%/0.95)] px-2 pb-2 pt-2 backdrop-blur-md">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
