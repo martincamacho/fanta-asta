@@ -11,8 +11,10 @@ async function createRoom(
   return (await res.json()) as { code: string; adminToken: string };
 }
 
+/** El buzzer es un celular: viewport móvil (el toggle "Solo watchlist" es solo <lg;
+ *  en desktop la watchlist vive en el panel lateral siempre visible). */
 async function joinBuzzer(browser: Browser, code: string, name: string): Promise<Page> {
-  const ctx = await browser.newContext({ locale: 'it-IT' });
+  const ctx = await browser.newContext({ locale: 'it-IT', viewport: { width: 390, height: 844 } });
   const page = await ctx.newPage();
   await page.goto(`/sala/${code}`);
   await page.getByRole('button', { name: 'Continua senza account' }).click();
@@ -48,11 +50,12 @@ test('watchlist: seguir desde el listone con budget y verlo marcado al ser llama
   await panel.getByPlaceholder(/Cerca giocatore/).fill('Dimarco');
   await expect(panel.getByText('Dimarco')).toBeVisible();
   await panel.getByRole('button', { name: 'Segui Dimarco' }).click();
-  await panel.getByLabel('Budget stimato per Dimarco').fill('30');
+  // .first(): el panel lateral de desktop existe oculto en el DOM (hidden lg:block).
+  await panel.getByLabel('Budget stimato per Dimarco').first().fill('30');
 
   // El filtro "Solo watchlist" lo agrupa por rol y muestra la suma estimada.
   await panel.getByRole('button', { name: /Solo watchlist/ }).click();
-  await expect(panel.getByText('Stima totale 30 cr · ti restano 500')).toBeVisible();
+  await expect(panel.getByText('Stima totale 30 cr · ti restano 500').first()).toBeVisible();
 
   // El admin lo llama a subasta: el buzzer lo marca solo para este usuario.
   const admin = await openAdmin(browser, code, adminToken);

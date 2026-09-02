@@ -74,6 +74,8 @@ interface WatchlistState {
   init: (code: string, authed: boolean) => Promise<void>;
   toggle: (playerId: number) => void;
   setMaxPrice: (playerId: number, maxPrice: number | null) => void;
+  /** Import: SUMA a la watchlist actual (sin duplicar; el budget entrante pisa al existente). */
+  mergeEntries: (incoming: WatchEntry[]) => void;
 }
 
 export const useWatchlist = create<WatchlistState>()((set, get) => ({
@@ -121,6 +123,19 @@ export const useWatchlist = create<WatchlistState>()((set, get) => ({
     const { code, entries, synced } = get();
     if (!code) return;
     const next = entries.map((e) => (e.playerId === playerId ? { ...e, maxPrice } : e));
+    set({ entries: next });
+    persistEntries(code, next, synced);
+  },
+
+  mergeEntries: (incoming) => {
+    const { code, entries, synced } = get();
+    if (!code || incoming.length === 0) return;
+    const map = new Map(entries.map((e) => [e.playerId, e] as const));
+    for (const e of incoming) {
+      const prev = map.get(e.playerId);
+      map.set(e.playerId, { playerId: e.playerId, maxPrice: e.maxPrice ?? prev?.maxPrice ?? null });
+    }
+    const next = [...map.values()];
     set({ entries: next });
     persistEntries(code, next, synced);
   },

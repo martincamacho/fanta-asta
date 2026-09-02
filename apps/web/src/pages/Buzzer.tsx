@@ -8,6 +8,7 @@ import {
   nextMinBid,
   rosterTarget,
   slotsLeftForRole,
+  spent,
   validateBid,
   type Participant,
   type Player,
@@ -25,7 +26,8 @@ import { persist, type StoredTicket } from '../lib/persist';
 import { useProfile } from '../lib/profile';
 import { useSoundPref } from '../lib/sound';
 import { useAuctionSounds } from '../lib/useAuctionSounds';
-import { useWatchlist } from '../lib/watchlist';
+import { useWatchlist, type WatchEntry } from '../lib/watchlist';
+import { csvCell, downloadTextFile, splitCsvLine } from '../lib/exports';
 import { useWakeLock } from '../lib/useWakeLock';
 import { useRoomGuard } from '../lib/useRoomGuard';
 import { useCountdown, auctionTimerMs, formatCountdown } from '../lib/useCountdown';
@@ -334,7 +336,7 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
         soundEnabled={soundPref.enabled}
         onToggleSound={soundPref.toggle}
       />
-      {/* Móvil-first; en monitores anchos el contenido queda centrado y contenido. */}
+      {/* Móvil-first; en monitores anchos la subasta queda en columna angosta centrada. */}
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col">
         {state.finishedAt !== null ? (
           <FinishedBody state={state} meId={me.id} />
@@ -347,8 +349,8 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
         ) : (
           <AuctionBody state={state} player={player} meId={me.id} />
         )}
-        <BottomTabs state={state} meId={me.id} />
       </div>
+      <BottomTabs state={state} meId={me.id} />
     </div>
   );
 }
@@ -922,6 +924,11 @@ function FinishedBody({ state, meId }: { state: RoomState; meId: string }) {
         <p className="mt-2 max-w-xs text-sm text-chalk-dim">
           {me ? t('buzzer.finishedMine', { n: me.roster.length }) : t('buzzer.finishedText')}
         </p>
+        {me && (
+          <div className="mt-3">
+            <MyRoseActions state={state} meId={meId} />
+          </div>
+        )}
       </div>
     </main>
   );
@@ -962,7 +969,7 @@ function BottomTabs({ state, meId }: { state: RoomState; meId: string }) {
 
   return (
     <section className="border-t chalk-line px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-3">
-      <div role="tablist" className="grid grid-cols-3 gap-1 rounded-xl bg-pitch-800/70 p-1">
+      <div role="tablist" className="mx-auto grid w-full max-w-2xl grid-cols-3 gap-1 rounded-xl bg-pitch-800/70 p-1">
         {tabs.map(({ id, label }) => (
           <button
             key={id}
@@ -978,7 +985,12 @@ function BottomTabs({ state, meId }: { state: RoomState; meId: string }) {
           </button>
         ))}
       </div>
-      <div role="tabpanel" aria-label={activeLabel} className="mt-3 rounded-2xl bg-pitch-950/70 p-4">
+      {/* El listone puede ensancharse en desktop (lista + watchlist lado a lado). */}
+      <div
+        role="tabpanel"
+        aria-label={activeLabel}
+        className={`mx-auto mt-3 w-full ${tab === 'listone' ? 'max-w-2xl lg:max-w-5xl' : 'max-w-2xl'}`}
+      >
         {tab === 'rosa' ? (
           <MyRoseTab state={state} meId={meId} />
         ) : tab === 'squadre' ? (
@@ -1080,7 +1092,6 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
     const out = [...players.values()].filter(
       (p) =>
         (!role || p.role === role) &&
-        (!watchOnly || watchedIds.has(p.id)) &&
         (!letter || normalize(p.name).startsWith(letter)) &&
         (!q || normalize(p.name).includes(q) || normalize(p.team).includes(q)),
     );
@@ -1098,7 +1109,10 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
         : b.quotazione - a.quotazione || a.name.localeCompare(b.name);
     });
     return out;
-  }, [players, query, role, sort, hideValues, watchOnly, watchedIds, letter]);
+  }, [players, query, role, sort, hideValues, letter]);
+
+  /** Vista "Solo watchlist" (móvil): la lista filtrada a los seguidos. */
+  const watchList = useMemo(() => list.filter((p) => watchedIds.has(p.id)), [list, watchedIds]);
 
   // Cualquier cambio de búsqueda/filtro/orden vuelve a la página 1.
   useEffect(() => {
@@ -1107,15 +1121,14 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
 
   const totalPages = Math.max(1, Math.ceil(list.length / LISTONE_PAGE_SIZE));
   const cur = Math.min(page, totalPages - 1);
-  const shown = watchOnly
-    ? list
-    : list.slice(cur * LISTONE_PAGE_SIZE, cur * LISTONE_PAGE_SIZE + LISTONE_PAGE_SIZE);
+  const shown = list.slice(cur * LISTONE_PAGE_SIZE, cur * LISTONE_PAGE_SIZE + LISTONE_PAGE_SIZE);
 
   const pageBtn =
     'flex h-11 min-w-11 items-center justify-center rounded-xl border chalk-line px-2 font-display text-xl font-bold text-chalk transition disabled:opacity-30 hover:bg-pitch-700';
 
   return (
-    <div>
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,22rem)]">
+      <div className="rounded-2xl bg-pitch-950/70 p-4">
       {/* barra de búsqueda/filtros, sticky al scrollear la pestaña */}
       <div className="sticky top-0 z-10 -mx-2 space-y-2 rounded-xl bg-[hsl(251_62%_11%/0.95)] px-2 pb-2 pt-2 backdrop-blur-md">
         <input
@@ -1152,11 +1165,12 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
             <option value="name">{t('admin.byName')}</option>
             <option value="role">{t('admin.byRole')}</option>
           </select>
+          {/* En desktop la watchlist está siempre a la vista en el panel hermano. */}
           <button
             type="button"
             onClick={() => setWatchOnly((v) => !v)}
             aria-pressed={watchOnly}
-            className={`h-9 rounded-full px-3 text-xs font-bold uppercase tracking-wider transition ${
+            className={`h-9 rounded-full px-3 text-xs font-bold uppercase tracking-wider transition lg:hidden ${
               watchOnly ? 'bg-gold text-pitch-950' : 'border chalk-line text-chalk-dim hover:text-chalk'
             }`}
           >
@@ -1165,9 +1179,13 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
         </div>
       </div>
 
-      {watchOnly ? (
-        <WatchlistView state={state} me={me} list={list} onSheet={setSheet} />
-      ) : (
+      {/* móvil: toggle "Solo watchlist"; desktop: la watchlist vive en el panel de al lado */}
+      {watchOnly && (
+        <div className="lg:hidden">
+          <WatchlistView state={state} me={me} list={watchList} onSheet={setSheet} />
+        </div>
+      )}
+      <div className={watchOnly ? 'hidden lg:block' : ''}>
         <>
           {/* salto por letra */}
           <div className="mt-2 flex flex-wrap gap-0.5">
@@ -1258,7 +1276,13 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
             </nav>
           )}
         </>
-      )}
+      </div>
+      </div>
+
+      {/* panel hermano (desktop): watchlist siempre a la vista */}
+      <aside className="sticky top-4 hidden rounded-2xl bg-pitch-950/70 p-4 lg:block">
+        <WatchlistPanel state={state} meId={meId} onSheet={setSheet} />
+      </aside>
 
       {sheet && (
         <PlayerSheet
@@ -1332,6 +1356,197 @@ function ListoneRow({
   );
 }
 
+/** Export/import de la watchlist como CSV (client-side puro): para llevarla a otra sala. */
+function WatchlistTools({ state }: { state: RoomState }) {
+  const players = useStore((s) => s.players);
+  const entries = useWatchlist((s) => s.entries);
+  const mergeEntries = useWatchlist((s) => s.mergeEntries);
+  const { t } = useT();
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  function exportCsv() {
+    const lines = ['id,nome,squadra,ruolo,budget'];
+    for (const e of entries) {
+      const p = players.get(e.playerId);
+      lines.push(
+        [e.playerId, csvCell(p?.name ?? ''), csvCell(p?.team ?? ''), p?.role ?? '', e.maxPrice ?? ''].join(','),
+      );
+    }
+    downloadTextFile('fanta-watchlist.csv', lines.join('\n'));
+  }
+
+  /** Matchea por id contra el listone efectivo; si no, por nome+squadra (listoni propios). */
+  function importCsv(file: File | undefined) {
+    if (!file) return;
+    file
+      .text()
+      .then((text) => {
+        const byName = new Map<string, Player>();
+        for (const p of players.values()) byName.set(`${normalize(p.name)}|${normalize(p.team)}`, p);
+        const incoming: WatchEntry[] = [];
+        let ignored = 0;
+        for (const line of text.split(/\r?\n/)) {
+          if (line.trim() === '') continue;
+          const cells = splitCsvLine(line);
+          if ((cells[0] ?? '').trim().toLowerCase() === 'id') continue; // encabezado
+          const id = Math.floor(Number(cells[0]));
+          const name = (cells[1] ?? '').trim();
+          const team = (cells[2] ?? '').trim();
+          const budget = Math.floor(Number(cells[4]));
+          let player = Number.isFinite(id) ? players.get(id) : undefined;
+          if (!player && name) player = byName.get(`${normalize(name)}|${normalize(team)}`);
+          if (player) {
+            incoming.push({
+              playerId: player.id,
+              maxPrice: Number.isFinite(budget) && budget > 0 ? budget : null,
+            });
+          } else {
+            ignored++;
+          }
+        }
+        mergeEntries(incoming);
+        setToast(t('watch.importResult', { n: incoming.length, m: ignored }));
+      })
+      .catch(() => setToast(t('watch.importErr')));
+  }
+
+  const toolBtn =
+    'rounded-lg border chalk-line px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-chalk-dim transition hover:text-chalk disabled:opacity-40';
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button type="button" onClick={exportCsv} disabled={entries.length === 0} className={toolBtn}>
+          {t('watch.export')}
+        </button>
+        <label className={`${toolBtn} cursor-pointer`}>
+          {t('watch.import')}
+          <input
+            type="file"
+            accept=".csv,text/csv,text/plain"
+            className="hidden"
+            onChange={(e) => {
+              importCsv(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </label>
+      </div>
+      {toast && (
+        <p role="status" className="animate-rise mt-1.5 text-[11px] font-semibold text-gold">
+          {toast}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Panel hermano del listone (desktop): la watchlist siempre a la vista, agrupada por rol. */
+function WatchlistPanel({
+  state,
+  meId,
+  onSheet,
+}: {
+  state: RoomState;
+  meId: string;
+  onSheet: (p: Player) => void;
+}) {
+  const players = useStore((s) => s.players);
+  const entries = useWatchlist((s) => s.entries);
+  const { t } = useT();
+  const me = state.participants.find((p) => p.id === meId);
+  const credits = me ? budgetRemaining(me, state.config) : 0;
+  const total = entries.reduce((sum, e) => sum + (e.maxPrice ?? 0), 0);
+  const over = me !== undefined && total > credits;
+  const watched = entries
+    .map((e) => players.get(e.playerId))
+    .filter((p): p is Player => p !== undefined);
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-display text-xl font-bold uppercase text-chalk">
+          <span className="text-gold">★</span> {t('watch.panelTitle')}
+        </p>
+        <WatchlistTools state={state} />
+      </div>
+      {watched.length === 0 ? (
+        <p className="mt-3 py-6 text-center text-sm text-chalk-faint">{t('watch.emptyHint')}</p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {ROLES.map((role) => {
+            const group = watched.filter((p) => p.role === role);
+            if (group.length === 0) return null;
+            const roleSum = group.reduce(
+              (sum, p) => sum + (entries.find((e) => e.playerId === p.id)?.maxPrice ?? 0),
+              0,
+            );
+            return (
+              <div key={role}>
+                <p className="mb-0.5 flex items-baseline justify-between">
+                  <span className={`text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[role].text}`}>
+                    {t(`role.${role}`)}
+                  </span>
+                  <span className="tabular text-xs text-chalk-faint">{roleSum} cr</span>
+                </p>
+                <ul className="divide-y divide-chalk/10">
+                  {group.map((p) => (
+                    <WatchPanelRow key={p.id} player={p} state={state} onSheet={() => onSheet(p)} />
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p
+        className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${
+          over ? 'bg-danger/15 text-danger' : 'bg-pitch-800/70 text-chalk-dim'
+        }`}
+      >
+        {t('watch.total', { sum: total, left: credits })}
+        {over && <span className="block">{t('watch.over')}</span>}
+      </p>
+    </div>
+  );
+}
+
+/** Fila compacta del panel de watchlist; los vendidos van tachados con quién se los llevó. */
+function WatchPanelRow({
+  player: p,
+  state,
+  onSheet,
+}: {
+  player: Player;
+  state: RoomState;
+  onSheet: () => void;
+}) {
+  const { t } = useT();
+  const status = playerStatus(state, p.id);
+  const sold = status.kind === 'sold';
+  return (
+    <li className={`flex items-center gap-2 py-2 ${sold ? 'opacity-55' : ''}`}>
+      <WatchStar player={p} className="flex h-9 w-9 items-center justify-center" />
+      <PlayerImg player={p} className="w-8 shrink-0" />
+      <button type="button" onClick={onSheet} className="min-w-0 flex-1 text-left">
+        <span className={`block truncate text-sm font-semibold text-chalk ${sold ? 'line-through' : ''}`}>
+          {p.name}
+        </span>
+        <span className="block truncate text-[11px] text-chalk-faint">
+          {status.kind === 'sold' ? t('listone.sold', { name: status.name, n: status.price }) : p.team}
+        </span>
+      </button>
+      <WatchMaxInput player={p} />
+    </li>
+  );
+}
+
 /** Vista "Solo watchlist": agrupada por rol, con suma de budgets estimados vs créditos. */
 function WatchlistView({
   state,
@@ -1351,11 +1566,19 @@ function WatchlistView({
   const over = me !== undefined && total > credits;
 
   if (list.length === 0) {
-    return <p className="mt-4 py-4 text-center text-sm text-chalk-faint">{t('watch.empty')}</p>;
+    return (
+      <div className="mt-2">
+        <WatchlistTools state={state} />
+        <p className="mt-2 py-4 text-center text-sm text-chalk-faint">{t('watch.empty')}</p>
+      </div>
+    );
   }
 
   return (
     <div className="mt-2">
+      <div className="mb-2">
+        <WatchlistTools state={state} />
+      </div>
       <p className={`rounded-lg px-3 py-2 text-xs font-semibold ${over ? 'bg-danger/15 text-danger' : 'bg-pitch-800/70 text-chalk-dim'}`}>
         {t('watch.total', { sum: total, left: credits })}
         {over && <span className="block">{t('watch.over')}</span>}
@@ -1472,7 +1695,7 @@ function MyRoseTab({ state, meId }: { state: RoomState; meId: string }) {
   const slotsLeft = Math.max(0, rosterTarget(state.config) - me.roster.length);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 rounded-2xl bg-pitch-950/70 p-4">
       <p className="text-xs font-semibold uppercase tracking-widest text-chalk-dim">
         {t('buzzer.myTeam', { name: me.name })}
       </p>
@@ -1500,6 +1723,100 @@ function MyRoseTab({ state, meId }: { state: RoomState; meId: string }) {
         <p className="text-xs text-chalk-faint">{t('buzzer.emptyRoster')}</p>
       )}
       <RosterByRole participant={me} state={state} />
+      {me.roster.length > 0 && <MyRoseActions state={state} meId={meId} />}
+    </div>
+  );
+}
+
+/** Descarga CSV de la rosa propia + texto listo para WhatsApp (client-side puro). */
+function MyRoseActions({ state, meId }: { state: RoomState; meId: string }) {
+  const players = useStore((s) => s.players);
+  const { t } = useT();
+  const [toast, setToast] = useState<string | null>(null);
+  const me = state.participants.find((p) => p.id === meId);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  if (!me || me.roster.length === 0) return null;
+  const totalSpent = spent(me);
+  const left = budgetRemaining(me, state.config);
+
+  /** Roster agrupado P→D→C→A, con datos del listone. */
+  function grouped(): Array<{ role: Role; rows: Array<{ name: string; team: string; price: number }> }> {
+    if (!me) return [];
+    return ROLES.map((role) => ({
+      role,
+      rows: me.roster
+        .filter((e) => players.get(e.playerId)?.role === role)
+        .map((e) => {
+          const p = players.get(e.playerId);
+          return { name: p?.name ?? `#${e.playerId}`, team: p?.team ?? '', price: e.price };
+        }),
+    })).filter((g) => g.rows.length > 0);
+  }
+
+  function downloadCsv() {
+    const lines = ['Ruolo,Giocatore,Squadra,Crediti'];
+    for (const g of grouped()) {
+      for (const r of g.rows) {
+        lines.push([g.role, csvCell(r.name), csvCell(r.team), r.price].join(','));
+      }
+    }
+    lines.push(`,,${csvCell('Totale speso')},${totalSpent}`);
+    lines.push(`,,${csvCell('Crediti rimanenti')},${left}`);
+    downloadTextFile(`mia-rosa-${state.code.toLowerCase()}.csv`, lines.join('\n'));
+  }
+
+  async function copyWhatsApp() {
+    if (!me) return;
+    const emoji: Record<Role, string> = { P: '🧤', D: '🛡️', C: '⚙️', A: '🎯' };
+    const parts = [`⚽ ${me.name} — ${state.config.leagueName} (${state.code})`];
+    for (const g of grouped()) {
+      parts.push(
+        `${emoji[g.role]} ${t(`role.${g.role}`)}: ${g.rows.map((r) => `${r.name} ${r.price}`).join(', ')}`,
+      );
+    }
+    parts.push(`💰 ${totalSpent} cr ${t('league.spentLabel')} · ${left} cr ${t('league.remainingLabel')}`);
+    const text = parts.join('\n');
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setToast(t('rose.copied'));
+      }
+    } catch {
+      /* share cancelado o clipboard bloqueado */
+    }
+  }
+
+  return (
+    <div className="border-t chalk-line pt-3">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={downloadCsv}
+          className="rounded-lg border chalk-line px-3 py-2 text-xs font-bold uppercase tracking-wider text-chalk-dim transition hover:text-chalk"
+        >
+          {t('rose.downloadCsv')}
+        </button>
+        <button
+          type="button"
+          onClick={() => void copyWhatsApp()}
+          className="rounded-lg border border-gold/60 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gold transition hover:bg-gold/10"
+        >
+          {t('rose.copyWa')}
+        </button>
+      </div>
+      {toast && (
+        <p role="status" className="animate-rise mt-2 text-xs font-semibold text-gold">
+          {toast}
+        </p>
+      )}
     </div>
   );
 }
@@ -1518,11 +1835,15 @@ function SquadsTab({ state, meId }: { state: RoomState; meId: string }) {
     );
 
   if (others.length === 0) {
-    return <p className="py-3 text-center text-sm text-chalk-faint">{t('tabs.noOthers')}</p>;
+    return (
+      <p className="rounded-2xl bg-pitch-950/70 p-4 py-6 text-center text-sm text-chalk-faint">
+        {t('tabs.noOthers')}
+      </p>
+    );
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-2 rounded-2xl bg-pitch-950/70 p-4">
       {others.map((p) => (
         <li key={p.id}>
           <details className="rounded-xl border chalk-line bg-pitch-800/50">
