@@ -17,9 +17,9 @@ describe('loader del listone', () => {
       { P: 0, D: 0, C: 0, A: 0 },
     );
 
-    // Archivo real 2026-27: 528 jugadores únicos (el PLAN dice "~527")
-    expect(players.length).toBe(528);
-    expect(byRole).toEqual({ P: 63, D: 186, C: 191, A: 88 });
+    // Archivo real 2026-27 al cierre del mercado: 537 jugadores únicos
+    expect(players.length).toBe(537);
+    expect(byRole).toEqual({ P: 64, D: 189, C: 194, A: 90 });
 
     // ids únicos
     expect(new Set(players.map((p) => p.id)).size).toBe(players.length);

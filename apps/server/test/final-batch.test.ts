@@ -341,6 +341,88 @@ describe('REST: listone por sala, export xlsx y config con rangos', () => {
     const missing = await server.app.inject({ method: 'GET', url: '/api/rooms/ZZZZZZ/rosters' });
     expect(missing.statusCode).toBe(404);
   });
+
+  it('POST /:code/players: alta manual con listone propio y compras hechas; duplicado 409; e2e subastable', async () => {
+    // duplicado exacto contra el listone propio (case-insensitive)
+    const dup = await server.app.inject({
+      method: 'POST',
+      url: `/api/rooms/${code}/players`,
+      payload: { adminToken, name: 'jugador1', team: 'equipo0', role: 'P' },
+    });
+    expect(dup.statusCode).toBe(409);
+
+    // rol inválido → 400; token malo → 403
+    const badRole = await server.app.inject({
+      method: 'POST',
+      url: `/api/rooms/${code}/players`,
+      payload: { adminToken, name: 'Nuovo', team: 'X', role: 'Z' },
+    });
+    expect(badRole.statusCode).toBe(400);
+    const badToken = await server.app.inject({
+      method: 'POST',
+      url: `/api/rooms/${code}/players`,
+      payload: { adminToken: 'trucho', name: 'Nuovo', team: 'X', role: 'P' },
+    });
+    expect(badToken.statusCode).toBe(403);
+
+    // alta ok con rol flexible, aun con compras hechas (Ana ya compró el -1)
+    const added = await server.app.inject({
+      method: 'POST',
+      url: `/api/rooms/${code}/players`,
+      payload: { adminToken, name: 'Nuovo Acquisto', team: 'Cremonese', role: 'Attaccante', quotazione: 7 },
+    });
+    expect(added.statusCode).toBe(200);
+    expect(added.json()).toEqual({
+      player: { id: -13, name: 'Nuovo Acquisto', team: 'Cremonese', role: 'A', quotazione: 7 },
+    }); // siguiente negativo libre tras -1..-12
+
+    const list = await server.app.inject({ method: 'GET', url: `/api/rooms/${code}/players` });
+    expect((list.json() as unknown[]).length).toBe(13);
+
+    // e2e: el agregado se subasta de punta a punta
+    const room = server.manager.getRoom(code)!;
+    const beto = joinPlayer(room, 'Beto Alta');
+    expect(room.call(-13)).toEqual({ ok: true });
+    expect(room.bid(beto, 2).ok).toBe(true);
+    expect(room.close()).toEqual({ ok: true });
+    const betoState = room.state.participants.find((p) => p.name === 'Beto Alta')!;
+    expect(betoState.roster).toEqual([{ playerId: -13, price: 2 }]);
+  });
+
+  it('POST /:code/players en sala SIN listone propio: copia el global y agrega con id -1; ok con subasta activa', async () => {
+    const created = await server.app.inject({ method: 'POST', url: '/api/rooms', payload: {} });
+    const fresh = created.json() as { code: string; adminToken: string };
+    const room = server.manager.getRoom(fresh.code)!;
+    expect(room.customListone).toBeNull();
+
+    // incluso con subasta activa
+    joinPlayer(room, 'Ana');
+    expect(room.call(5841)).toEqual({ ok: true });
+
+    const added = await server.app.inject({
+      method: 'POST',
+      url: `/api/rooms/${fresh.code}/players`,
+      payload: { adminToken: fresh.adminToken, name: 'Fantasma', team: 'Test FC', role: 'd' },
+    });
+    expect(added.statusCode).toBe(200);
+    expect(added.json()).toEqual({
+      player: { id: -1, name: 'Fantasma', team: 'Test FC', role: 'D', quotazione: 1 }, // default 1
+    });
+
+    // el listone propio quedó como copia del global + el nuevo
+    expect(room.customListone).toHaveLength(server.players.length + 1);
+    expect(room.effectivePlayers.get(5841)?.name).toBe('Svilar'); // el global sigue ahí
+    const list = await server.app.inject({ method: 'GET', url: `/api/rooms/${fresh.code}/players` });
+    expect((list.json() as unknown[]).length).toBe(server.players.length + 1);
+
+    // name/team vacíos → 400
+    const noName = await server.app.inject({
+      method: 'POST',
+      url: `/api/rooms/${fresh.code}/players`,
+      payload: { adminToken: fresh.adminToken, name: '  ', team: 'X', role: 'P' },
+    });
+    expect(noName.statusCode).toBe(400);
+  });
 });
 
 // ── Persistencia del listone propio ────────────────────────────────────────

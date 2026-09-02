@@ -13,9 +13,9 @@ import {
   type RoomState,
 } from '@fanta/shared';
 import { useStore } from '../store';
-import { useT } from '../i18n';
+import { errorText, useT } from '../i18n';
 import { actions, joinRoom, leaveRoom } from '../lib/socket';
-import { loadPlayers, uploadListone } from '../lib/api';
+import { addPlayer, ApiError, loadPlayers, uploadListone } from '../lib/api';
 import { downloadTabellone } from '../lib/tabellone';
 import { persist } from '../lib/persist';
 import { useRoomGuard } from '../lib/useRoomGuard';
@@ -506,7 +506,153 @@ function Listone({ state }: { state: RoomState }) {
           </li>
         )}
       </ul>
+
+      <AddPlayerForm code={state.code} teams={teams} />
     </section>
+  );
+}
+
+/** Alta manual de un jugador que falta en el listone. A diferencia del CSV,
+ *  disponible SIEMPRE (aún con compras o subasta activa): es el "uy, falta uno". */
+function AddPlayerForm({ code, teams }: { code: string; teams: string[] }) {
+  const { t } = useT();
+  const [name, setName] = useState('');
+  const [team, setTeam] = useState('');
+  const [role, setRole] = useState<Role>('P');
+  const [quota, setQuota] = useState('1');
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+
+  // El toast de éxito se va solo; los errores quedan hasta el próximo intento.
+  useEffect(() => {
+    if (status?.kind !== 'ok') return;
+    const timer = setTimeout(() => setStatus(null), 2500);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  const valid = name.trim().length > 0 && team.trim().length > 0;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!valid || busy) return;
+    const token = persist.getAdminToken(code);
+    if (!token) {
+      setStatus({ kind: 'error', text: t('admin.listoneNoToken') });
+      return;
+    }
+    setBusy(true);
+    setStatus(null);
+    try {
+      await addPlayer(code, token, {
+        name: name.trim(),
+        team: team.trim(),
+        role,
+        quotazione: Math.max(1, Math.floor(Number(quota)) || 1),
+      });
+      // El listone se recarga solo vía el RoomEvent 'listone_loaded'.
+      setStatus({ kind: 'ok', text: t('admin.addOk') });
+      setName('');
+      setQuota('1');
+    } catch (err) {
+      const text =
+        err instanceof ApiError && err.code
+          ? errorText(t, { code: err.code, message: err.message })
+          : err instanceof Error && err.message
+            ? err.message
+            : t('admin.addErr');
+      setStatus({ kind: 'error', text });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details className="mt-3 rounded-lg border chalk-line px-3 py-2">
+      <summary className="cursor-pointer list-none text-[11px] font-semibold uppercase tracking-widest text-chalk-dim hover:text-chalk [&::-webkit-details-marker]:hidden">
+        {t('admin.addPlayer')}
+      </summary>
+      <p className="mt-1 text-xs text-chalk-faint">{t('admin.addPlayerText')}</p>
+      <form onSubmit={submit} className="mt-2 flex flex-wrap items-end gap-2">
+        <label className="block min-w-36 flex-1">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
+            {t('admin.addName')}
+          </span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={60}
+            className={`${inputCls} w-full py-1.5`}
+          />
+        </label>
+        <label className="block min-w-32">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
+            {t('admin.addTeam')}
+          </span>
+          <input
+            value={team}
+            onChange={(e) => setTeam(e.target.value)}
+            list="add-player-teams"
+            maxLength={40}
+            className={`${inputCls} w-full py-1.5`}
+          />
+          <datalist id="add-player-teams">
+            {teams.map((tm) => (
+              <option key={tm} value={tm} />
+            ))}
+          </datalist>
+        </label>
+        <div>
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
+            {t('admin.addRole')}
+          </span>
+          <div className="flex gap-1">
+            {ROLES.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRole(r)}
+                aria-pressed={role === r}
+                title={t(`role.${r}`)}
+                className={`h-9 w-9 rounded-lg font-display text-lg font-bold transition ${
+                  role === r
+                    ? ROLE_STYLES[r].badge
+                    : `border chalk-line ${ROLE_STYLES[r].text} hover:bg-pitch-700`
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
+            {t('admin.addQuota')}
+          </span>
+          <input
+            type="number"
+            min={1}
+            value={quota}
+            onChange={(e) => setQuota(e.target.value)}
+            className={`${inputCls} tabular w-20 py-1.5`}
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={busy || !valid}
+          className="rounded-lg bg-gold px-4 py-2 font-display text-lg font-bold uppercase text-pitch-950 disabled:opacity-40"
+        >
+          {busy ? t('admin.addBusy') : t('admin.addSubmit')}
+        </button>
+      </form>
+      {status && (
+        <p
+          role="status"
+          className={`mt-2 text-sm font-semibold ${status.kind === 'ok' ? 'text-success' : 'text-danger'}`}
+        >
+          {status.text}
+        </p>
+      )}
+    </details>
   );
 }
 

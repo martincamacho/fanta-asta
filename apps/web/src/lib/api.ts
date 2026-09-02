@@ -1,4 +1,4 @@
-import type { Player, RoomConfig } from '@fanta/shared';
+import type { Player, Role, RoomConfig } from '@fanta/shared';
 import { useStore } from '../store';
 import { MOCK } from './mock';
 import { MOCK_CODE, MOCK_PLAYERS } from './mockState';
@@ -69,6 +69,47 @@ export async function loadPlayers(roomCode?: string, force = false): Promise<voi
   }
   store.setPlayers(players);
   loadedScope = scope;
+}
+
+/** Error de la API con código opcional del server (para traducirlo; el texto queda de fallback). */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+async function apiFail(res: Response): Promise<never> {
+  let message = `Error ${res.status}`;
+  let code: string | undefined;
+  try {
+    const body = (await res.json()) as { error?: string; message?: string; code?: string };
+    message = body.error ?? body.message ?? message;
+    if (typeof body.code === 'string') code = body.code;
+  } catch {
+    /* sin cuerpo JSON */
+  }
+  throw new ApiError(message, code);
+}
+
+/** Agrega un jugador suelto al listone efectivo de la sala (el server le asigna id negativo).
+ *  Disponible siempre, aún con compras o subasta activa. */
+export async function addPlayer(
+  code: string,
+  adminToken: string,
+  data: { name: string; team: string; role: Role; quotazione: number },
+): Promise<{ player: Player }> {
+  const res = await fetch(`/api/rooms/${encodeURIComponent(code)}/players`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adminToken, ...data }),
+  });
+  if (!res.ok) await apiFail(res);
+  return json(res);
 }
 
 /** Sube el listone propio de la sala (CSV clásico FantaBuzzer o Nome,Squadra,Ruolo,Quotazione). */

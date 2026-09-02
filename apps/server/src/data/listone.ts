@@ -50,7 +50,7 @@ export function playersById(players: readonly Player[]): Map<number, Player> {
 }
 
 /** Normaliza un rol flexible (P/Por/Portiere, D/Dif/Difensore, C/Cen/Centrocampista, A/Att/Attaccante). */
-function normalizeRole(raw: string | undefined): Role | null {
+export function normalizeRole(raw: string | undefined): Role | null {
   const first = (raw ?? '').trim().charAt(0).toUpperCase();
   return ROLES.includes(first as Role) ? (first as Role) : null;
 }

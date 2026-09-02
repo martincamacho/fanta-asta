@@ -20,7 +20,7 @@ import {
 } from '@fanta/shared';
 import { ENGINE_ERROR_MESSAGES, validateConfigRanges, type Room } from './engine/room.js';
 import { DEFAULT_DB_PATH, RoomManager, mergeRoomConfig } from './engine/roomManager.js';
-import { DATA_DIR, loadListone, parseCustomListone, playersById } from './data/listone.js';
+import { DATA_DIR, loadListone, normalizeRole, parseCustomListone, playersById } from './data/listone.js';
 import { loadProfiles } from './data/profiles.js';
 import { buildRoseCsv, buildRoseXlsx } from './export/rose.js';
 import { openDatabase } from './db.js';
@@ -128,6 +128,37 @@ export async function createServer(opts: CreateServerOptions = {}): Promise<Fant
     const r = room.setListone(parsed);
     if (!r.ok) return reply.code(409).send({ error: ENGINE_ERROR_MESSAGES[r.error] });
     return { count: r.count };
+  });
+
+  // Alta manual de un jugador faltante en el listone efectivo de la sala.
+  // Permitido con compras hechas y con subasta activa ("uy, falta X").
+  app.post('/api/rooms/:code/players', async (req, reply) => {
+    const code = (req.params as { code: string }).code.toUpperCase();
+    const room = manager.getRoom(code);
+    if (!room) return reply.code(404).send({ error: 'La sala no existe' });
+    const body = (req.body ?? {}) as {
+      adminToken?: unknown;
+      name?: unknown;
+      team?: unknown;
+      role?: unknown;
+      quotazione?: unknown;
+    };
+    if (!manager.verifyAdmin(code, typeof body.adminToken === 'string' ? body.adminToken : undefined)) {
+      return reply.code(403).send({ error: 'Token de admin inválido' });
+    }
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const team = typeof body.team === 'string' ? body.team.trim() : '';
+    if (!name || !team) return reply.code(400).send({ error: 'Faltan nombre y/o equipo del jugador' });
+    const role = normalizeRole(typeof body.role === 'string' ? body.role : undefined);
+    if (!role) return reply.code(400).send({ error: 'Rol inválido (P/D/C/A)' });
+    const quotazione = typeof body.quotazione === 'number' ? body.quotazione : undefined;
+
+    const r = room.addPlayer({ name, team, role, quotazione });
+    if (!r.ok) {
+      const status = r.error === 'duplicate_player' ? 409 : 400;
+      return reply.code(status).send({ error: ENGINE_ERROR_MESSAGES[r.error] });
+    }
+    return { player: r.player };
   });
 
   // Listone efectivo de la sala (propio si subió CSV, global si no).

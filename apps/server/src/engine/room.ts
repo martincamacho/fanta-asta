@@ -7,6 +7,7 @@ import {
   type Bid,
   type BidRejectReason,
   type Player,
+  type Role,
   type RoomConfig,
   type RoomEvent,
   type RoomState,
@@ -40,7 +41,8 @@ export type EngineError =
   | 'invalid_bid_amount'
   | 'invalid_delta'
   | 'invalid_config'
-  | 'listone_locked';
+  | 'listone_locked'
+  | 'duplicate_player';
 
 export const ENGINE_ERROR_MESSAGES: Record<EngineError, string> = {
   unknown_player: 'Ese jugador no existe en el listone',
@@ -66,6 +68,7 @@ export const ENGINE_ERROR_MESSAGES: Record<EngineError, string> = {
   invalid_delta: 'El ajuste de créditos debe ser un número entero',
   invalid_config: 'Cupos inválidos: mínimo ≤ máximo por rol y suma de mínimos ≤ plantilla ≤ suma de máximos',
   listone_locked: 'No se puede cambiar el listone: hay una subasta activa o ya hubo compras',
+  duplicate_player: 'Ese jugador ya está en el listone (mismo nombre y equipo)',
 };
 
 /**
@@ -183,6 +186,41 @@ export class Room {
     this.state.unsoldPlayerIds = []; // ids del listone anterior ya no aplican
     this.emit({ type: 'listone_loaded', count: players.length });
     return { ok: true, count: players.length };
+  }
+
+  /**
+   * Alta manual de un jugador faltante ("uy, falta X" a mitad del asta).
+   * A diferencia del upload de CSV completo, está permitida con compras hechas
+   * y con subasta activa. Si la sala no tiene listone propio, lo inicializa
+   * como copia del global. Id negativo único estable (siguiente libre).
+   */
+  addPlayer(data: { name: string; team: string; role: Role; quotazione?: number }): EngineResult<{ player: Player }> {
+    const name = data.name.trim();
+    const team = data.team.trim();
+    const dupKey = `${name.toLowerCase()}|${team.toLowerCase()}`;
+    for (const p of this.players.values()) {
+      if (`${p.name.toLowerCase()}|${p.team.toLowerCase()}` === dupKey) {
+        return { ok: false, error: 'duplicate_player' };
+      }
+    }
+
+    if (!this.customListone) this.customListone = [...this.players.values()];
+    let minId = 0;
+    for (const p of this.customListone) if (p.id < minId) minId = p.id;
+    const player: Player = {
+      id: minId - 1,
+      name,
+      team,
+      role: data.role,
+      quotazione:
+        typeof data.quotazione === 'number' && Number.isFinite(data.quotazione) && data.quotazione > 0
+          ? data.quotazione
+          : 1,
+    };
+    this.customListone.push(player);
+    this.players = new Map(this.customListone.map((p) => [p.id, p]));
+    this.emit({ type: 'listone_loaded', count: this.customListone.length });
+    return { ok: true, player };
   }
 
   // ── Participantes ────────────────────────────────────────────────────────
