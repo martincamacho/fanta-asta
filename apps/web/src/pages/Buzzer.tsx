@@ -11,6 +11,7 @@ import {
   validateBid,
   type Participant,
   type Player,
+  type Role,
   type RoomState,
 } from '@fanta/shared';
 import { useStore } from '../store';
@@ -24,11 +25,13 @@ import { persist, type StoredTicket } from '../lib/persist';
 import { useProfile } from '../lib/profile';
 import { useSoundPref } from '../lib/sound';
 import { useAuctionSounds } from '../lib/useAuctionSounds';
+import { useWatchlist } from '../lib/watchlist';
 import { useWakeLock } from '../lib/useWakeLock';
 import { useRoomGuard } from '../lib/useRoomGuard';
 import { useCountdown, auctionTimerMs, formatCountdown } from '../lib/useCountdown';
 import { currentBid, currentCallerId, normalize, participantName } from '../lib/format';
 import { PlayerImg } from '../components/PlayerImg';
+import { PlayerSheet } from '../components/PlayerSheet';
 import { RoleBadge, ROLE_STYLES } from '../components/RoleBadge';
 import { NotLeagueMember, RoomMissing } from '../components/RoomMissing';
 import { LangSwitcher } from '../components/LangSwitcher';
@@ -120,7 +123,7 @@ export default function Buzzer() {
 
 function CenterMsg({ children }: { children: ReactNode }) {
   return (
-    <div className="pitch-bg flex min-h-dvh items-center justify-center px-6 text-center text-chalk-dim">
+    <div className="theme-buzz buzz-bg flex min-h-dvh items-center justify-center px-6 text-center text-chalk-dim">
       {children}
     </div>
   );
@@ -174,7 +177,7 @@ function AccessGate({ code, onAnonReady }: { code: string; onAnonReady: (name: s
   }
 
   return (
-    <div className="pitch-bg flex min-h-dvh flex-col justify-center px-6">
+    <div className="theme-buzz buzz-bg flex min-h-dvh flex-col justify-center px-6">
       <form onSubmit={submit} className="mx-auto w-full max-w-sm">
         <p className="text-sm font-semibold uppercase tracking-[0.3em] text-gold">
           {t('buzzer.room', { code: code.toUpperCase() })}
@@ -238,7 +241,7 @@ function AccessGate({ code, onAnonReady }: { code: string; onAnonReady: (name: s
         <button
           type="submit"
           disabled={busy || !valid}
-          className="mt-4 w-full rounded-xl bg-primary py-4 font-display text-2xl font-bold uppercase tracking-wider text-white disabled:bg-pitch-700 disabled:text-chalk-faint"
+          className="mt-4 w-full rounded-xl bg-gold py-4 font-display text-2xl font-bold uppercase tracking-wider text-pitch-950 disabled:bg-pitch-700 disabled:text-chalk-faint"
         >
           {busy ? t('auth.busy') : t('buzzer.enter')}
         </button>
@@ -280,9 +283,15 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
   const selfId = useStore((s) => s.selfId);
   const players = useStore((s) => s.players);
   const joinError = useStore((s) => s.joinError);
+  const authStatus = useAuth((s) => s.status);
   const { t } = useT();
   const soundPref = useSoundPref('buzzer');
   useAuctionSounds(state, soundPref.enabled);
+
+  // Watchlist privada de la sala (local + sync con sesión).
+  useEffect(() => {
+    void useWatchlist.getState().init(code, authStatus === 'authed');
+  }, [code, authStatus]);
 
   if (joinError) {
     return (
@@ -316,7 +325,7 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
   const player = state.auction.playerId !== null ? players.get(state.auction.playerId) : undefined;
 
   return (
-    <div className="pitch-bg flex min-h-dvh flex-col">
+    <div className="theme-buzz buzz-bg flex min-h-dvh flex-col">
       <TopBar
         code={code}
         state={state}
@@ -557,6 +566,8 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
   const [shake, setShake] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const profile = useProfile(player.id);
+  // El jugador llamado está en MI watchlist → marca bien visible (solo la ve este cliente).
+  const watchEntry = useWatchlist((s) => s.entries.find((e) => e.playerId === player.id));
 
   const bid = currentBid(state);
   const minAmount = nextMinBid(state, players);
@@ -621,6 +632,14 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
                 <StatBadges profile={profile} compact />
               </div>
             )}
+            {watchEntry && (
+              <p className="animate-rise mt-1.5 inline-flex items-center gap-1 rounded-full bg-gold/20 px-2.5 py-0.5 text-xs font-bold text-gold">
+                ★{' '}
+                {watchEntry.maxPrice !== null
+                  ? t('watch.calledMax', { n: watchEntry.maxPrice })
+                  : t('watch.called')}
+              </p>
+            )}
           </div>
         </div>
 
@@ -661,9 +680,9 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
           type="button"
           onClick={() => fire()}
           disabled={!check.ok}
-          className={`flex flex-1 flex-col items-center justify-center rounded-2xl transition active:scale-[0.97] ${
+          className={`flex flex-1 flex-col items-center justify-center rounded-3xl transition active:scale-[0.97] ${
             check.ok
-              ? 'bg-primary text-white shadow-[0_0_60px_-10px_hsl(217_93%_52%_/_0.65)]'
+              ? 'bg-gold text-pitch-950 shadow-[0_0_70px_-12px_hsl(70_90%_55%/0.8)]'
               : premi && !check.ok && check.reason === 'own_bid'
                 ? 'bg-secondary text-navy'
                 : 'bg-pitch-800 text-chalk-faint'
@@ -729,7 +748,7 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
             <button
               type="submit"
               disabled={!customCheck || !customCheck.ok}
-              className="rounded-xl border-2 border-primary/70 px-5 font-display text-xl font-bold uppercase text-primary disabled:border-pitch-700 disabled:text-chalk-faint"
+              className="rounded-xl border-2 border-gold/70 px-5 font-display text-xl font-bold uppercase text-gold disabled:border-pitch-700 disabled:text-chalk-faint"
             >
               {t('buzzer.offer')}
             </button>
@@ -765,61 +784,78 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
   );
 }
 
+/** Countdown circular estilo FantaAsta Buzz: anillo violeta claro, número en lima
+ *  y la palabra "secondi" debajo. En pausa el anillo queda quieto en lima. */
 function CountdownBar({ state }: { state: RoomState }) {
   const { t } = useT();
-  const { remainingMs, fraction, active } = useCountdown(
-    state.auction.deadline,
-    auctionTimerMs(state),
-  );
-  const danger = active && remainingMs < 2000;
+  const total = auctionTimerMs(state);
+  const { remainingMs, fraction, active } = useCountdown(state.auction.deadline, total);
   const pausedMs = state.auction.pausedRemainingMs;
-  if (pausedMs !== null) {
-    const total = auctionTimerMs(state);
+  const paused = pausedMs !== null;
+  const danger = !paused && active && remainingMs < 2000;
+
+  if (!paused && state.auction.deadline === null) {
     return (
-      <div className="mt-3">
-        <div className="flex items-baseline justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-gold">
-            {t('buzzer.pausedBy')}
-          </span>
-          <span className="tabular font-display text-3xl font-bold leading-none text-gold">
-            {formatCountdown(pausedMs)}
-          </span>
-        </div>
-        <div className="mt-1 h-2 overflow-hidden rounded-full bg-pitch-700">
-          <div
-            className="h-full rounded-full bg-gold/70"
-            style={{ width: `${total > 0 ? Math.min(1, pausedMs / total) * 100 : 0}%` }}
-          />
-        </div>
-      </div>
-    );
-  }
-  if (state.auction.deadline === null) {
-    return (
-      <p className="mt-3 text-center text-xs uppercase tracking-widest text-chalk-faint">
+      <p className="mt-3 text-center text-xs uppercase tracking-widest text-chalk-dim">
         {t('buzzer.noTimer')}
       </p>
     );
   }
+
+  const shownMs = paused ? pausedMs : remainingMs;
+  const shownFraction = paused ? (total > 0 ? Math.min(1, pausedMs / total) : 0) : fraction;
+  const seconds = Math.max(0, Math.ceil(shownMs / 1000));
+  const R = 54;
+  const C = 2 * Math.PI * R;
+
   return (
-    <div className="mt-3" role="timer" aria-label={t('count.remaining', { time: formatCountdown(remainingMs) })}>
-      <div className="flex items-baseline justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
-          {state.auction.phase === 'called' ? t('buzzer.firstBid') : t('buzzer.closesIn')}
-        </span>
-        <span
-          className={`tabular font-display text-3xl font-bold leading-none ${
-            danger ? 'text-danger animate-pulse-danger' : 'text-chalk'
-          }`}
-        >
-          {formatCountdown(remainingMs)}
-        </span>
-      </div>
-      <div className="mt-1 h-2 overflow-hidden rounded-full bg-pitch-700">
-        <div
-          className={`h-full rounded-full ${danger ? 'bg-danger' : 'bg-chalk'}`}
-          style={{ width: `${fraction * 100}%` }}
-        />
+    <div
+      className="mt-3 flex items-center justify-center gap-5"
+      role="timer"
+      aria-label={
+        paused
+          ? t('count.pausedRemaining', { time: formatCountdown(shownMs) })
+          : t('count.remaining', { time: formatCountdown(shownMs) })
+      }
+    >
+      <p
+        className={`max-w-[9rem] text-right text-[11px] font-semibold uppercase tracking-widest ${
+          paused ? 'text-gold' : 'text-chalk-dim'
+        }`}
+      >
+        {paused
+          ? t('buzzer.pausedBy')
+          : state.auction.phase === 'called'
+            ? t('buzzer.firstBid')
+            : t('buzzer.closesIn')}
+      </p>
+      <div className={`relative h-28 w-28 shrink-0 ${danger ? 'animate-pulse-danger' : ''}`}>
+        <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+          <circle cx="60" cy="60" r={R} fill="none" stroke="var(--color-chalk)" strokeOpacity="0.16" strokeWidth="6" />
+          <circle
+            cx="60"
+            cy="60"
+            r={R}
+            fill="none"
+            stroke={paused ? 'var(--color-gold)' : danger ? 'var(--color-danger)' : 'hsl(252 90% 80%)'}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={C}
+            strokeDashoffset={C * (1 - shownFraction)}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span
+            className={`tabular font-display text-5xl font-bold leading-none ${
+              danger ? 'text-danger' : 'text-gold'
+            }`}
+          >
+            {seconds}
+          </span>
+          <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.3em] text-chalk-dim">
+            {t('buzzer.seconds')}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -891,14 +927,15 @@ function FinishedBody({ state, meId }: { state: RoomState; meId: string }) {
 /* ————— pestañas inferiores: mi rosa / squadre ————— */
 
 const TAB_STORAGE_KEY = 'fanta:buzzerTab';
-type TabId = 'rosa' | 'squadre';
+type TabId = 'rosa' | 'squadre' | 'listone';
 
-/** Dos pestañas con estado vivo bajo cualquier fase; la activa persiste en localStorage. */
+/** Tres pestañas con estado vivo bajo cualquier fase; la activa persiste en localStorage. */
 function BottomTabs({ state, meId }: { state: RoomState; meId: string }) {
   const { t } = useT();
   const [tab, setTab] = useState<TabId>(() => {
     try {
-      return localStorage.getItem(TAB_STORAGE_KEY) === 'squadre' ? 'squadre' : 'rosa';
+      const stored = localStorage.getItem(TAB_STORAGE_KEY);
+      return stored === 'squadre' || stored === 'listone' ? stored : 'rosa';
     } catch {
       return 'rosa';
     }
@@ -916,11 +953,13 @@ function BottomTabs({ state, meId }: { state: RoomState; meId: string }) {
   const tabs: { id: TabId; label: string }[] = [
     { id: 'rosa', label: t('tabs.myRose') },
     { id: 'squadre', label: t('tabs.squads') },
+    { id: 'listone', label: t('tabs.listone') },
   ];
+  const activeLabel = tabs.find((x) => x.id === tab)?.label;
 
   return (
     <section className="border-t chalk-line px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-3">
-      <div role="tablist" className="grid grid-cols-2 gap-1 rounded-xl bg-pitch-800/70 p-1">
+      <div role="tablist" className="grid grid-cols-3 gap-1 rounded-xl bg-pitch-800/70 p-1">
         {tabs.map(({ id, label }) => (
           <button
             key={id}
@@ -929,21 +968,311 @@ function BottomTabs({ state, meId }: { state: RoomState; meId: string }) {
             aria-selected={tab === id}
             onClick={() => pick(id)}
             className={`rounded-lg py-2 font-display text-lg font-bold uppercase tracking-wider transition ${
-              tab === id ? 'bg-pitch-600 text-chalk' : 'text-chalk-dim hover:text-chalk'
+              tab === id ? 'bg-gold text-pitch-950' : 'text-chalk-dim hover:text-chalk'
             }`}
           >
             {label}
           </button>
         ))}
       </div>
-      <div role="tabpanel" aria-label={tab === 'rosa' ? t('tabs.myRose') : t('tabs.squads')} className="mt-3">
+      <div role="tabpanel" aria-label={activeLabel} className="mt-3">
         {tab === 'rosa' ? (
           <MyRoseTab state={state} meId={meId} />
-        ) : (
+        ) : tab === 'squadre' ? (
           <SquadsTab state={state} meId={meId} />
+        ) : (
+          <ListoneTab state={state} meId={meId} />
         )}
       </div>
     </section>
+  );
+}
+
+/* ————— watchlist (estrella + budget estimado) ————— */
+
+function WatchStar({ player, className = '' }: { player: Player; className?: string }) {
+  const { t } = useT();
+  const watched = useWatchlist((s) => s.entries.some((e) => e.playerId === player.id));
+  const toggle = useWatchlist((s) => s.toggle);
+  return (
+    <button
+      type="button"
+      onClick={() => toggle(player.id)}
+      aria-pressed={watched}
+      aria-label={
+        watched ? t('watch.unstar', { name: player.name }) : t('watch.star', { name: player.name })
+      }
+      className={`shrink-0 rounded px-1 text-xl leading-none transition ${
+        watched ? 'text-gold' : 'text-chalk-faint hover:text-chalk'
+      } ${className}`}
+    >
+      {watched ? '★' : '☆'}
+    </button>
+  );
+}
+
+/** Input chico de "budget stimato": aparece solo si el jugador está en la watchlist. */
+function WatchMaxInput({ player }: { player: Player }) {
+  const { t } = useT();
+  const entry = useWatchlist((s) => s.entries.find((e) => e.playerId === player.id));
+  const setMaxPrice = useWatchlist((s) => s.setMaxPrice);
+  if (!entry) return null;
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={1}
+      value={entry.maxPrice ?? ''}
+      onChange={(e) => {
+        const n = Math.floor(Number(e.target.value));
+        setMaxPrice(player.id, Number.isFinite(n) && n > 0 ? n : null);
+      }}
+      placeholder={t('watch.maxPh')}
+      aria-label={t('watch.maxAria', { name: player.name })}
+      className="tabular w-16 shrink-0 rounded-lg border chalk-line bg-pitch-900 px-2 py-1 text-center text-sm font-bold text-gold placeholder:text-[10px] placeholder:font-normal placeholder:text-chalk-faint"
+    />
+  );
+}
+
+/* ————— pestaña listone ————— */
+
+/** Estado de un jugador en la sala: vendido (a quién y por cuánto) / richiama / disponible. */
+function playerStatus(
+  state: RoomState,
+  playerId: number,
+): { kind: 'sold'; name: string; price: number } | { kind: 'richiama' } | { kind: 'available' } {
+  for (const p of state.participants) {
+    const entry = p.roster.find((e) => e.playerId === playerId);
+    if (entry) return { kind: 'sold', name: p.name, price: entry.price };
+  }
+  if (state.unsoldPlayerIds.includes(playerId)) return { kind: 'richiama' };
+  return { kind: 'available' };
+}
+
+/** Explorador del listone efectivo para cualquier participante: búsqueda, filtros por
+ *  rol, orden, estado de cada jugador, ficha y watchlist con budget estimado. */
+function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
+  const players = useStore((s) => s.players);
+  const { t } = useT();
+  const [query, setQuery] = useState('');
+  const [role, setRole] = useState<Role | null>(null);
+  const [sort, setSort] = useState<'quotazione' | 'name'>(
+    state.config.hideValues ? 'name' : 'quotazione',
+  );
+  const [watchOnly, setWatchOnly] = useState(false);
+  const [sheet, setSheet] = useState<Player | null>(null);
+  const entries = useWatchlist((s) => s.entries);
+  const hideValues = state.config.hideValues;
+  const me = state.participants.find((p) => p.id === meId);
+
+  const watchedIds = useMemo(() => new Set(entries.map((e) => e.playerId)), [entries]);
+
+  const list = useMemo(() => {
+    const q = normalize(query.trim());
+    const out = [...players.values()].filter(
+      (p) =>
+        (!role || p.role === role) &&
+        (!watchOnly || watchedIds.has(p.id)) &&
+        (!q || normalize(p.name).includes(q) || normalize(p.team).includes(q)),
+    );
+    out.sort((a, b) =>
+      sort === 'name' || hideValues
+        ? a.name.localeCompare(b.name)
+        : b.quotazione - a.quotazione || a.name.localeCompare(b.name),
+    );
+    return out;
+  }, [players, query, role, sort, hideValues, watchOnly, watchedIds]);
+
+  const shown = watchOnly ? list : list.slice(0, 60);
+
+  return (
+    <div>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={t('admin.searchPh')}
+        className="w-full rounded-lg border chalk-line bg-pitch-900 px-3 py-2 text-chalk placeholder:text-chalk-faint"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="flex gap-1">
+          {ROLES.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRole(role === r ? null : r)}
+              aria-pressed={role === r}
+              title={t(`role.${r}`)}
+              className={`h-8 w-8 rounded-full font-display text-base font-bold transition ${
+                role === r
+                  ? ROLE_STYLES[r].badge
+                  : `border chalk-line ${ROLE_STYLES[r].text} hover:bg-pitch-700`
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        {!hideValues && (
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as 'quotazione' | 'name')}
+            className="rounded-lg border chalk-line bg-pitch-900 px-2 py-1.5 text-sm text-chalk"
+          >
+            <option value="quotazione">{t('admin.byQuota')}</option>
+            <option value="name">{t('admin.byName')}</option>
+          </select>
+        )}
+        <button
+          type="button"
+          onClick={() => setWatchOnly((v) => !v)}
+          aria-pressed={watchOnly}
+          className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition ${
+            watchOnly ? 'bg-gold text-pitch-950' : 'border chalk-line text-chalk-dim hover:text-chalk'
+          }`}
+        >
+          ★ {t('watch.only')}
+        </button>
+      </div>
+
+      {watchOnly ? (
+        <WatchlistView state={state} me={me} list={list} onSheet={setSheet} />
+      ) : (
+        <ul className="mt-2 divide-y divide-chalk/10">
+          {shown.map((p) => (
+            <ListoneRow key={p.id} player={p} state={state} onSheet={() => setSheet(p)} />
+          ))}
+          {shown.length === 0 && (
+            <li className="py-6 text-center text-sm text-chalk-faint">{t('buzzer.noResults')}</li>
+          )}
+          {list.length > shown.length && (
+            <li className="py-2 text-center text-xs text-chalk-faint">
+              {t('admin.morePlayers', { n: list.length - shown.length })}
+            </li>
+          )}
+        </ul>
+      )}
+
+      {sheet && (
+        <PlayerSheet
+          player={sheet}
+          onClose={() => setSheet(null)}
+          actions={
+            <span className="flex items-center gap-2">
+              <WatchStar player={sheet} />
+              <WatchMaxInput player={sheet} />
+            </span>
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function ListoneRow({
+  player: p,
+  state,
+  onSheet,
+}: {
+  player: Player;
+  state: RoomState;
+  onSheet: () => void;
+}) {
+  const { t } = useT();
+  const status = playerStatus(state, p.id);
+  const sold = status.kind === 'sold';
+  return (
+    <li className={`flex items-center gap-2 py-2 ${sold ? 'opacity-60' : ''}`}>
+      <WatchStar player={p} />
+      <PlayerImg player={p} className="w-9 shrink-0" />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <RoleBadge role={p.role} size="sm" />
+          <span className={`truncate text-sm text-chalk ${sold ? 'line-through' : ''}`}>
+            {p.name}
+          </span>
+          <span className="truncate text-xs text-chalk-faint">{p.team}</span>
+        </span>
+        <span className="mt-0.5 block text-[11px] text-chalk-faint">
+          {status.kind === 'sold'
+            ? t('listone.sold', { name: status.name, n: status.price })
+            : status.kind === 'richiama'
+              ? t('admin.richiamaTag')
+              : t('listone.available')}
+        </span>
+      </span>
+      <WatchMaxInput player={p} />
+      {!state.config.hideValues && (
+        <span className="tabular w-8 shrink-0 text-right font-display text-lg font-bold text-chalk-dim">
+          {p.quotazione}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={onSheet}
+        aria-label={t('admin.fichaOf', { name: p.name })}
+        title={t('admin.seeFicha')}
+        className="shrink-0 rounded px-1.5 py-1 text-xs font-bold text-gold hover:bg-pitch-700/60"
+      >
+        {t('admin.ficha')}
+      </button>
+    </li>
+  );
+}
+
+/** Vista "Solo watchlist": agrupada por rol, con suma de budgets estimados vs créditos. */
+function WatchlistView({
+  state,
+  me,
+  list,
+  onSheet,
+}: {
+  state: RoomState;
+  me: Participant | undefined;
+  list: Player[];
+  onSheet: (p: Player) => void;
+}) {
+  const { t } = useT();
+  const entries = useWatchlist((s) => s.entries);
+  const credits = me ? budgetRemaining(me, state.config) : 0;
+  const total = entries.reduce((sum, e) => sum + (e.maxPrice ?? 0), 0);
+  const over = me !== undefined && total > credits;
+
+  if (list.length === 0) {
+    return <p className="mt-4 py-4 text-center text-sm text-chalk-faint">{t('watch.empty')}</p>;
+  }
+
+  return (
+    <div className="mt-2">
+      <p className={`rounded-lg px-3 py-2 text-xs font-semibold ${over ? 'bg-danger/15 text-danger' : 'bg-pitch-800/70 text-chalk-dim'}`}>
+        {t('watch.total', { sum: total, left: credits })}
+        {over && <span className="block">{t('watch.over')}</span>}
+      </p>
+      <div className="mt-2 space-y-3">
+        {ROLES.map((role) => {
+          const group = list.filter((p) => p.role === role);
+          if (group.length === 0) return null;
+          const roleSum = group.reduce(
+            (sum, p) => sum + (entries.find((e) => e.playerId === p.id)?.maxPrice ?? 0),
+            0,
+          );
+          return (
+            <div key={role}>
+              <p className="mb-1 flex items-baseline justify-between">
+                <span className={`text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[role].text}`}>
+                  {t(`role.${role}`)}
+                </span>
+                <span className="tabular text-xs text-chalk-faint">{roleSum} cr</span>
+              </p>
+              <ul className="divide-y divide-chalk/10">
+                {group.map((p) => (
+                  <ListoneRow key={p.id} player={p} state={state} onSheet={() => onSheet(p)} />
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

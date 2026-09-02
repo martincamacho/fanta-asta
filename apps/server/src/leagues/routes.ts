@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { InviteInfo, LeagueDetail, RoomConfig, User } from '@fanta/shared';
+import type { InviteInfo, LeagueDetail, RoomConfig, User, WatchlistEntry } from '@fanta/shared';
 import { validateConfigRanges } from '../engine/room.js';
 import { mergeRoomConfig, type RoomManager } from '../engine/roomManager.js';
 import { sendInviteEmail } from './email.js';
@@ -270,5 +270,47 @@ export function registerLeagueRoutes(app: FastifyInstance, { store, manager }: D
     }
 
     return { participantId: store.getOrCreateTicket(code, user.id), name: user.name };
+  });
+
+  // ── Watchlist privada pre-asta ───────────────────────────────────────────
+  // PRIVADA del usuario logueado por sala: nunca se expone en rosters ni por
+  // el socket. Como el ticket, no requiere membresía de liga.
+
+  app.get('/api/rooms/:code/watchlist', async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return reply;
+    const code = (req.params as { code: string }).code.toUpperCase();
+    if (!manager.getRoom(code)) return fail(reply, 404, 'La sala no existe');
+    return { entries: store.getWatchlist(user.id, code) };
+  });
+
+  app.put('/api/rooms/:code/watchlist', async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return reply;
+    const code = (req.params as { code: string }).code.toUpperCase();
+    if (!manager.getRoom(code)) return fail(reply, 404, 'La sala no existe');
+
+    const body = (req.body ?? {}) as { entries?: unknown };
+    if (!Array.isArray(body.entries)) return fail(reply, 400, 'Falta la lista de entries');
+    if (body.entries.length > 100) return fail(reply, 400, 'La watchlist admite hasta 100 jugadores');
+
+    const entries: WatchlistEntry[] = [];
+    const seen = new Set<number>();
+    for (const raw of body.entries as Array<Record<string, unknown>>) {
+      const playerId = raw?.playerId;
+      const maxPrice = raw?.maxPrice ?? null;
+      if (typeof playerId !== 'number' || !Number.isFinite(playerId)) {
+        return fail(reply, 400, 'playerId inválido en la watchlist');
+      }
+      if (maxPrice !== null && (!Number.isInteger(maxPrice) || (maxPrice as number) < 1)) {
+        return fail(reply, 400, 'maxPrice debe ser un entero ≥ 1 o null');
+      }
+      if (seen.has(playerId)) return fail(reply, 400, 'La watchlist tiene jugadores repetidos');
+      seen.add(playerId);
+      entries.push({ playerId, maxPrice: maxPrice as number | null });
+    }
+
+    store.setWatchlist(user.id, code, entries);
+    return { entries };
   });
 }

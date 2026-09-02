@@ -301,6 +301,7 @@ function BoardAuction({ state }: { state: RoomState }) {
           durationMs={auctionTimerMs(state)}
           pausedMs={phase === 'sold' || phase === 'unsold' ? null : state.auction.pausedRemainingMs}
           className="h-[clamp(10rem,24vh,16rem)] w-[clamp(10rem,24vh,16rem)]"
+          accent
         />
       </div>
 

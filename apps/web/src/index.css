@@ -23,6 +23,9 @@
   --color-success: hsl(96 70% 42%);
   --color-info: hsl(195 100% 42%);
   --color-alt: hsl(257 76% 55%);
+  /* estilo FantaAsta Buzz: violeta eléctrico + amarillo lima */
+  --color-violet: hsl(250 95% 55%);
+  --color-lime: hsl(70 90% 55%);
 
   /* superficie/tinta contextuales — default: navy nocturno (vistas de asta) */
   --color-pitch-950: hsl(230 28% 9%);
@@ -90,6 +93,38 @@ body {
   --color-gold: hsl(19 95% 64%);
   --color-danger: hsl(350 98% 65%);
   color: var(--color-chalk);
+}
+
+/* ————— Vista buzzer estilo FantaAsta Buzz —————
+   Fondo violeta eléctrico, paneles indigo muy oscuros, acento lima para lo
+   accionable (el token --color-gold se re-mapea a lima dentro del scope). */
+.theme-buzz {
+  color-scheme: dark;
+  --color-pitch-950: hsl(251 70% 9%);
+  --color-pitch-900: hsl(251 62% 12%);
+  --color-pitch-800: hsl(251 55% 16%);
+  --color-pitch-700: hsl(251 45% 25%);
+  --color-pitch-600: hsl(250 38% 38%);
+  --color-chalk: hsl(0 0% 100%);
+  --color-chalk-dim: hsl(250 65% 88%);
+  --color-chalk-faint: hsl(250 40% 76%);
+  --color-gold: hsl(70 90% 55%);
+  --color-danger: hsl(350 98% 68%);
+  color: var(--color-chalk);
+}
+.buzz-bg {
+  background-color: hsl(250 95% 55%);
+  background-image:
+    radial-gradient(60rem 34rem at 50% -12%, hsl(252 100% 66% / 0.55), transparent 65%),
+    radial-gradient(52rem 30rem at 90% 112%, hsl(256 90% 42% / 0.55), transparent 60%);
+  background-attachment: fixed;
+}
+/* Badges de rol como círculos de color (referencia FantaAsta Buzz) */
+.theme-buzz .role-badge {
+  border-radius: 9999px;
+}
+.theme-buzz :focus-visible {
+  outline-color: var(--color-lime);
 }
 
 /* Ambiente nocturno de las vistas de asta: navy con reflejos azul/violeta */

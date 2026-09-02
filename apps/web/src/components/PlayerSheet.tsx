@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import type { Player } from '@fanta/shared';
 import { useProfile } from '../lib/profile';
 import { useT } from '../i18n';
@@ -6,8 +6,17 @@ import { PlayerImg } from './PlayerImg';
 import { RoleBadge } from './RoleBadge';
 import { StatBadges } from './StatBadges';
 
-/** Scheda del jugador estilo fantacalcio.it: card + badges MV/FM/FVM + datos + descripción. */
-export function PlayerSheet({ player, onClose }: { player: Player; onClose: () => void }) {
+/** Scheda del jugador estilo fantacalcio.it: card + badges MV/FM/FVM + datos + descripción.
+ *  `actions`: controles extra del contexto (ej. estrella de watchlist en el buzzer). */
+export function PlayerSheet({
+  player,
+  onClose,
+  actions,
+}: {
+  player: Player;
+  onClose: () => void;
+  actions?: ReactNode;
+}) {
   const profile = useProfile(player.id);
   const { t } = useT();
 
@@ -54,6 +63,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
             <div className="mt-3">
               <StatBadges profile={profile} />
             </div>
+            {actions && <div className="mt-3">{actions}</div>}
           </div>
           <button
             type="button"

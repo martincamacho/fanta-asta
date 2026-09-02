@@ -18,7 +18,16 @@
  *  POST /api/leagues/:id/auctions {config?} → {code, adminToken}     (solo admin; sala ligada a la liga)
  *  GET  /api/rooms/:code/ticket → {participantId, name}              (miembro autenticado de la liga de esa
  *                                                                     sala; identidad estable para el socket)
+ *  GET  /api/rooms/:code/watchlist → {entries: WatchlistEntry[]}     (privada del usuario logueado, por sala)
+ *  PUT  /api/rooms/:code/watchlist {entries} → {entries}             (reemplaza la lista completa; máx 100)
  */
+
+/** Jugador seguido en la watchlist privada pre-asta (planificación del usuario). */
+export interface WatchlistEntry {
+  playerId: number;
+  /** Presupuesto estimado que el usuario piensa gastar en él (null = sin estimar). */
+  maxPrice: number | null;
+}
 export interface User {
   id: string;
   email: string;

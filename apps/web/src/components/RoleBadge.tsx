@@ -28,7 +28,7 @@ export function RoleBadge({
   return (
     <span className="inline-flex items-center gap-2">
       <span
-        className={`${ROLE_STYLES[role].badge} ${sizes[size]} inline-flex items-center justify-center rounded font-display font-bold`}
+        className={`role-badge ${ROLE_STYLES[role].badge} ${sizes[size]} inline-flex items-center justify-center rounded font-display font-bold`}
         aria-label={roleName}
       >
         {role}

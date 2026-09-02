@@ -8,12 +8,15 @@ export function CountdownRing({
   durationMs,
   pausedMs = null,
   className = '',
+  accent = false,
 }: {
   deadline: number | null;
   durationMs: number;
   /** Si la subasta está pausada: ms restantes congelados (anillo quieto, en oro). */
   pausedMs?: number | null;
   className?: string;
+  /** Número/anillo en amarillo lima (acento FantaAsta Buzz — lo usa el tablero). */
+  accent?: boolean;
 }) {
   const { t } = useT();
   const { remainingMs, fraction, active } = useCountdown(deadline, durationMs);
@@ -25,7 +28,9 @@ export function CountdownRing({
     ? 'var(--color-gold)'
     : danger
       ? 'var(--color-danger)'
-      : 'var(--color-chalk)';
+      : accent
+        ? 'var(--color-lime)'
+        : 'var(--color-chalk)';
   const shownFraction = paused
     ? durationMs > 0
       ? Math.min(1, pausedMs / durationMs)
@@ -68,7 +73,7 @@ export function CountdownRing({
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span
           className={`font-display font-bold tabular leading-none ${
-            paused ? 'text-gold' : danger ? 'text-danger' : 'text-chalk'
+            paused ? 'text-gold' : danger ? 'text-danger' : accent ? 'text-lime' : 'text-chalk'
           } ${paused ? 'text-[clamp(1.2rem,26cqw,4.2rem)]' : 'text-[clamp(1.4rem,32cqw,5rem)]'}`}
         >
           {!hasRing ? '—' : formatCountdown(shownMs)}

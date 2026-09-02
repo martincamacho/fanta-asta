@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
-import type { LeagueAuctionInfo, LeagueMemberInfo, LeagueSummary, User } from '@fanta/shared';
+import type { LeagueAuctionInfo, LeagueMemberInfo, LeagueSummary, User, WatchlistEntry } from '@fanta/shared';
 import { hashPassword, verifyPassword } from './passwords.js';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
@@ -93,6 +93,13 @@ export class LeagueStore {
         user_id TEXT NOT NULL,
         participant_id TEXT NOT NULL,
         PRIMARY KEY (room_code, user_id)
+      );
+      CREATE TABLE IF NOT EXISTS watchlists (
+        user_id TEXT NOT NULL,
+        room_code TEXT NOT NULL,
+        entries_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, room_code)
       );
     `);
     this.migrateNullablePassHash();
@@ -338,6 +345,32 @@ export class LeagueStore {
       )
       .get(roomCode) as LeagueRow | undefined;
     return row ? toSummary(row) : null;
+  }
+
+  // ── Watchlist privada pre-asta ───────────────────────────────────────────
+
+  /** Watchlist PRIVADA del usuario para una sala ([] si nunca guardó). */
+  getWatchlist(userId: string, roomCode: string): WatchlistEntry[] {
+    const row = this.db
+      .prepare('SELECT entries_json FROM watchlists WHERE user_id = ? AND room_code = ?')
+      .get(userId, roomCode) as { entries_json: string } | undefined;
+    if (!row) return [];
+    try {
+      const parsed = JSON.parse(row.entries_json) as WatchlistEntry[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Reemplaza la watchlist completa del usuario para esa sala. */
+  setWatchlist(userId: string, roomCode: string, entries: WatchlistEntry[]): void {
+    this.db
+      .prepare(
+        `INSERT INTO watchlists (user_id, room_code, entries_json, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, room_code) DO UPDATE SET entries_json = excluded.entries_json, updated_at = excluded.updated_at`,
+      )
+      .run(userId, roomCode, JSON.stringify(entries), this.now());
   }
 
   /** participantId ESTABLE por (sala, usuario): se genera una vez y se persiste. */
