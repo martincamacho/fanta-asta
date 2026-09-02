@@ -33,6 +33,7 @@ import { useWakeLock } from '../lib/useWakeLock';
 import { useRoomGuard } from '../lib/useRoomGuard';
 import { useCountdown, auctionTimerMs, formatCountdown } from '../lib/useCountdown';
 import { currentBid, currentCallerId, normalize, participantName } from '../lib/format';
+import { Icon } from '../components/icons';
 import { PlayerImg } from '../components/PlayerImg';
 import { PlayerSheet } from '../components/PlayerSheet';
 import { RoleBadge, ROLE_STYLES } from '../components/RoleBadge';
@@ -394,7 +395,8 @@ function TopBar({
       <div className="flex shrink-0 items-center gap-2">
         <LangSwitcher compact />
         <SoundToggle enabled={soundEnabled} onToggle={onToggleSound} />
-        <span className="tabular rounded-md bg-pitch-800 px-2.5 py-1 font-display text-xl font-bold text-gold">
+        <span className="tabular flex items-center gap-1 rounded-md bg-pitch-800 px-2.5 py-1 font-display text-xl font-bold text-gold">
+          <Icon name="coin" className="text-base" />
           {credits} cr
         </span>
       </div>
@@ -596,6 +598,13 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
     bid && bidderBudgetTotal > 0
       ? Math.max(1, Math.round((bid.amount / bidderBudgetTotal) * 100))
       : null;
+  /** Dato estilo FantaLab: la oferta ya superó la quotazione (oculto con hideValues). */
+  const aboveQuota =
+    !premi &&
+    !state.config.hideValues &&
+    bid != null &&
+    player.quotazione > 0 &&
+    bid.amount > player.quotazione;
 
   // room:error → toast localizado por código + sacudida del botón
   useEffect(() => {
@@ -652,7 +661,7 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
             )}
             {watchEntry && (
               <p className="animate-rise mt-1.5 inline-flex items-center gap-1 rounded-full bg-gold/20 px-2.5 py-0.5 text-xs font-bold text-gold">
-                ★{' '}
+                <Icon name="star" fill="currentColor" />{' '}
                 {watchEntry.maxPrice !== null
                   ? t('watch.calledMax', { n: watchEntry.maxPrice })
                   : t('watch.called')}
@@ -674,6 +683,7 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
                 </p>
                 {!premi && bidder && (
                   <p className="tabular truncate text-[11px] text-chalk-faint">
+                    <Icon name="coin" className="mr-1" />
                     {t('buzzer.bidderCredits', {
                       n: bidderRemaining,
                       m: bidderRemaining - bid.amount,
@@ -688,10 +698,17 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
           <div className="flex shrink-0 flex-col items-end">
             <span
               key={eventSeq}
-              className="tabular animate-bid-pop font-display text-6xl font-bold leading-none text-gold"
+              className="tabular animate-bid-pop flex items-center gap-1.5 font-display text-6xl font-bold leading-none text-gold"
             >
+              {bid && <Icon name="coin" className="text-2xl opacity-70" />}
               {bid ? bid.amount : '—'}
             </span>
+            {aboveQuota && (
+              <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold/80">
+                <Icon name="trendUp" className="mr-0.5" />
+                {t('buzzer.aboveQuota')}
+              </span>
+            )}
             {!premi && bid && bidPct !== null && (
               <span className="tabular mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-chalk-faint">
                 {t('buzzer.pctOfBudget', { n: bidPct })}
@@ -742,6 +759,7 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
                   {minAmount}
                 </span>
                 <span className="text-xs font-semibold uppercase tracking-widest opacity-70">
+                  <Icon name="coin" className="mr-1" />
                   {t('buzzer.credits')}
                 </span>
               </>
@@ -782,8 +800,8 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
                   title={quick.ok ? undefined : errorText(t, { code: quick.reason })}
                   className="flex min-h-14 flex-1 flex-col items-center justify-center rounded-xl border-2 border-gold/70 py-2.5 font-display font-bold uppercase text-gold transition active:scale-[0.97] disabled:border-pitch-700 disabled:text-chalk-faint"
                 >
-                  <span className="tabular text-2xl leading-none">
-                    +{inc} · {amount}
+                  <span className="tabular flex items-center gap-1 text-2xl leading-none">
+                    +{inc} · <Icon name="coin" className="text-base opacity-80" /> {amount}
                   </span>
                   {!quick.ok && check.ok && (
                     <span className="mt-1 text-[10px] font-semibold tracking-widest">
@@ -887,6 +905,7 @@ function CountdownBar({ state }: { state: RoomState }) {
           paused ? 'text-gold' : 'text-chalk-dim'
         }`}
       >
+        <Icon name={paused ? 'pause' : 'clock'} className="mr-1" />
         {paused
           ? t('buzzer.pausedBy')
           : state.auction.phase === 'called'
@@ -938,6 +957,7 @@ function SoldBody({ state, player, meId }: { state: RoomState; player: Player; m
         <PlayerImg player={player} className="w-40" />
         <div>
           <p className={`font-display text-6xl font-bold uppercase leading-none ${mine ? 'text-gold animate-ticker-glow' : 'text-chalk'}`}>
+            <Icon name="gavel" className="mr-2 text-4xl" />
             {t('buzzer.sold')}
           </p>
           <p className="mt-3 text-lg text-chalk-dim">
@@ -945,6 +965,7 @@ function SoldBody({ state, player, meId }: { state: RoomState; player: Player; m
             {t('buzzer.soldLine', {
               winner: mine ? t('buzzer.yourTeam') : participantName(state, winnerId),
             })}{' '}
+            <Icon name="coin" className="mr-0.5 text-gold" />{' '}
             <span className="tabular font-display text-3xl font-bold text-gold">{price}</span>{' '}
             {t('buzzer.credits')}
           </p>
@@ -1080,7 +1101,7 @@ function WatchStar({ player, className = '' }: { player: Player; className?: str
         watched ? 'text-gold' : 'text-chalk-faint hover:text-chalk'
       } ${className}`}
     >
-      {watched ? '★' : '☆'}
+      <Icon name="star" fill={watched ? 'currentColor' : 'none'} />
     </button>
   );
 }
@@ -1227,7 +1248,8 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
               watchOnly ? 'bg-gold text-pitch-950' : 'border chalk-line text-chalk-dim hover:text-chalk'
             }`}
           >
-            ★ {t('watch.only')}
+            <Icon name="star" fill="currentColor" className="mr-1" />
+            {t('watch.only')}
           </button>
         </div>
       </div>
@@ -1877,6 +1899,7 @@ function WatchBoard({
                 </span>
               )}
               <span className="tabular ml-auto shrink-0 text-[11px] text-chalk-faint">
+                <Icon name="coin" className="mr-0.5" />
                 {t('watch.subtotal', { n: roleSubtotal })}
               </span>
             </button>
@@ -1943,6 +1966,7 @@ function WatchBoard({
                         </>
                       )}
                       <span className="tabular shrink-0 text-[10px] text-chalk-faint">
+                        <Icon name="coin" className="mr-0.5" />
                         {t('watch.subtotal', { n: groupSubtotal })}
                       </span>
                     </div>
@@ -2063,6 +2087,7 @@ function WatchBoard({
                                             </span>
                                             {x.entry.maxPrice !== null && (
                                               <span className="tabular shrink-0 text-xs font-bold text-gold">
+                                                <Icon name="coin" className="mr-0.5" />
                                                 {x.entry.maxPrice}
                                               </span>
                                             )}
@@ -2383,7 +2408,8 @@ function WatchlistPanel({
     <div>
       <div className="flex items-start justify-between gap-2">
         <p className="font-display text-xl font-bold uppercase text-chalk">
-          <span className="text-gold">★</span> {t('watch.panelTitle')}
+          <Icon name="star" fill="currentColor" className="mr-1 text-gold" />
+          {t('watch.panelTitle')}
         </p>
         <WatchlistTools state={state} />
       </div>
@@ -2398,6 +2424,7 @@ function WatchlistPanel({
           over ? 'bg-danger/15 text-danger' : 'bg-pitch-800/70 text-chalk-dim'
         }`}
       >
+        <Icon name="coin" className="mr-1" />
         {t('watch.total', { sum: total, left: credits })}
         {over && <span className="block">{t('watch.over')}</span>}
       </p>
@@ -2431,6 +2458,7 @@ function WatchlistView({
           over ? 'bg-danger/15 text-danger' : 'bg-pitch-800/70 text-chalk-dim'
         }`}
       >
+        <Icon name="coin" className="mr-1" />
         {t('watch.total', { sum: total, left: credits })}
         {over && <span className="block">{t('watch.over')}</span>}
       </p>
@@ -2497,6 +2525,7 @@ function RosterByRole({ participant, state }: { participant: Participant; state:
                       <span className="truncate text-xs text-chalk-faint">{p?.team}</span>
                     </span>
                     <span className="tabular font-display text-base font-bold text-gold">
+                      <Icon name="coin" className="mr-0.5 text-xs opacity-80" />
                       {entry.price}
                     </span>
                   </li>
@@ -2529,6 +2558,7 @@ function MyRoseTab({ state, meId }: { state: RoomState; meId: string }) {
   return (
     <div className="space-y-3 rounded-2xl bg-pitch-950/70 p-4">
       <p className="text-xs font-semibold uppercase tracking-widest text-chalk-dim">
+        <Icon name="shirt" className="mr-1" />
         {t('buzzer.myTeam', { name: me.name })}
       </p>
       <div className="flex items-end justify-between gap-3 rounded-xl border chalk-line bg-pitch-800/60 px-4 py-3">
@@ -2536,7 +2566,8 @@ function MyRoseTab({ state, meId }: { state: RoomState; meId: string }) {
           <p className="text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
             {t('tabs.creditsLeft')}
           </p>
-          <p className={`tabular font-display text-6xl font-bold leading-none ${credits < 0 ? 'text-danger' : 'text-gold'}`}>
+          <p className={`tabular flex items-center gap-1.5 font-display text-6xl font-bold leading-none ${credits < 0 ? 'text-danger' : 'text-gold'}`}>
+            <Icon name="coin" className="text-2xl opacity-70" />
             {credits}
           </p>
         </div>
@@ -2544,7 +2575,10 @@ function MyRoseTab({ state, meId }: { state: RoomState; meId: string }) {
           <p className="text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
             {t('tabs.maxBid')}
           </p>
-          <p className="tabular font-display text-4xl font-bold leading-none text-chalk">{max}</p>
+          <p className="tabular flex items-center justify-end gap-1 font-display text-4xl font-bold leading-none text-chalk">
+            <Icon name="coin" className="text-lg opacity-60" />
+            {max}
+          </p>
         </div>
       </div>
       <RoleProgress participant={me} state={state} />
@@ -2685,6 +2719,7 @@ function SquadsTab({ state, meId }: { state: RoomState; meId: string }) {
                 aria-label={p.connected ? t('conn.connected') : t('conn.offline')}
               />
               <span className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-chalk">
+                <Icon name="shirt" className="mr-1.5 text-sm text-chalk-dim" />
                 {p.name}
               </span>
               <span className="flex shrink-0 gap-1.5 text-[11px]">
@@ -2703,6 +2738,7 @@ function SquadsTab({ state, meId }: { state: RoomState; meId: string }) {
                 })}
               </span>
               <span className={`tabular shrink-0 font-display text-2xl font-bold ${budgetRemaining(p, config) < 0 ? 'text-danger' : 'text-gold'}`}>
+                <Icon name="coin" className="mr-1 text-base opacity-80" />
                 {budgetRemaining(p, config)}
                 <span className="ml-0.5 text-xs font-semibold text-chalk-dim">cr</span>
               </span>

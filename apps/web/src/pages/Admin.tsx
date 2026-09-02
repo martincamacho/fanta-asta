@@ -22,6 +22,7 @@ import { useRoomGuard } from '../lib/useRoomGuard';
 import { auctionTimerMs } from '../lib/useCountdown';
 import { buzzerUrl, currentBid, currentCallerId, normalize, participantName } from '../lib/format';
 import { flexSlotsError } from '../components/AuctionConfigForm';
+import { Icon } from '../components/icons';
 import { AssignmentsPanel } from '../components/AssignmentsPanel';
 import { CountdownRing } from '../components/CountdownRing';
 import { LangSwitcher } from '../components/LangSwitcher';
@@ -903,6 +904,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
             onClick={() => actions.close()}
             className="rounded-xl bg-gold px-5 py-2.5 font-display text-xl font-bold uppercase text-pitch-950"
           >
+            <Icon name="gavel" className="mr-1.5" />
             {bid ? t('admin.closeAward') : t('admin.closeDesert')}
           </button>
           {state.auction.pausedRemainingMs === null ? (
@@ -956,6 +958,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
             {[...state.auction.bids].reverse().map((b, i) => (
               <li key={`${b.at}-${b.participantId}`} className="flex items-baseline gap-3 text-sm">
                 <span className={`tabular font-display text-lg font-bold ${i === 0 ? 'text-gold' : 'text-chalk-dim'}`}>
+                  <Icon name="coin" className="mr-1 text-xs opacity-80" />
                   {b.amount}
                 </span>
                 <span className={i === 0 ? 'text-chalk' : 'text-chalk-dim'}>
@@ -1215,6 +1218,7 @@ function ParticipantCard({
       </div>
       <div className="mt-2 flex items-baseline gap-4">
         <span className={`tabular font-display text-3xl font-bold ${credits < 0 ? 'text-danger' : 'text-gold'}`}>
+          <Icon name="coin" className="mr-1.5 text-lg opacity-80" />
           {credits} <span className="text-sm font-semibold text-chalk-dim">cr</span>
         </span>
         {p.budgetBonus !== 0 && (

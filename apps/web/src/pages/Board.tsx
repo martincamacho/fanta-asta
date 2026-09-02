@@ -23,6 +23,7 @@ import { useRoomGuard } from '../lib/useRoomGuard';
 import { buzzerUrl, currentBid, currentCallerId, participantName } from '../lib/format';
 import { CountdownRing } from '../components/CountdownRing';
 import { auctionTimerMs } from '../lib/useCountdown';
+import { Icon } from '../components/icons';
 import { PlayerImg } from '../components/PlayerImg';
 import { RoleBadge } from '../components/RoleBadge';
 import { NotLeagueMember, RoomMissing } from '../components/RoomMissing';
@@ -270,6 +271,15 @@ function BanditoreColumn({ state }: { state: RoomState }) {
     bid && bidderBudgetTotal > 0
       ? Math.max(1, Math.round((bid.amount / bidderBudgetTotal) * 100))
       : null;
+  /** La oferta ya superó la quotazione del jugador llamado (oculto con hideValues). */
+  const calledQuota =
+    state.auction.playerId !== null ? (players.get(state.auction.playerId)?.quotazione ?? 0) : 0;
+  const aboveQuota =
+    !premi &&
+    !state.config.hideValues &&
+    bid != null &&
+    calledQuota > 0 &&
+    bid.amount > calledQuota;
 
   return (
     <Column title={t('board.colBanditore')}>
@@ -285,6 +295,7 @@ function BanditoreColumn({ state }: { state: RoomState }) {
         {phase === 'sold' ? (
           <div className="animate-sold text-center">
             <p className="font-display text-[clamp(2.6rem,4.5vw,4.5rem)] font-bold uppercase leading-none text-gold animate-ticker-glow">
+              <Icon name="gavel" className="mr-3 text-[0.6em]" />
               {t('board.sold')}
             </p>
             <p className="mt-3 text-2xl text-chalk">
@@ -294,6 +305,7 @@ function BanditoreColumn({ state }: { state: RoomState }) {
               </span>
             </p>
             <p className="tabular mt-1 font-display text-[clamp(3.5rem,6vw,6rem)] font-bold leading-none text-gold">
+              <Icon name="coin" className="mr-2 text-[0.4em] opacity-70" />
               {bid?.amount ?? 0}
             </p>
           </div>
@@ -308,6 +320,7 @@ function BanditoreColumn({ state }: { state: RoomState }) {
           <div className="w-full max-w-md rounded-2xl bg-pitch-800/80 px-6 py-5 text-center">
             {paused && (
               <p className="mb-2 inline-block rounded-full bg-gold/20 px-4 py-1 text-sm font-bold uppercase tracking-widest text-gold">
+                <Icon name="pause" className="mr-1" />
                 {t('board.paused')}
               </p>
             )}
@@ -333,13 +346,21 @@ function BanditoreColumn({ state }: { state: RoomState }) {
                     key={eventSeq}
                     className="tabular animate-bid-pop font-display text-[clamp(4rem,8vw,7.5rem)] font-bold leading-none text-gold"
                   >
+                    <Icon name="coin" className="mr-2 text-[0.35em] opacity-70" />
                     {bid.amount}
                   </p>
+                  {aboveQuota && (
+                    <p className="mt-1 text-sm font-semibold uppercase tracking-widest text-gold/80">
+                      <Icon name="trendUp" className="mr-1" />
+                      {t('buzzer.aboveQuota')}
+                    </p>
+                  )}
                   <p className="mt-1 truncate font-display text-3xl font-semibold text-chalk">
                     {participantName(state, bid.participantId)}
                   </p>
                   {bidder && (
                     <p className="tabular mt-1 truncate text-lg text-chalk-faint">
+                      <Icon name="coin" className="mr-1.5" />
                       {t('buzzer.bidderCredits', {
                         n: bidderRemaining,
                         m: bidderRemaining - bid.amount,
@@ -437,6 +458,7 @@ function BoardFinished({ state }: { state: RoomState }) {
                   {p.name}
                 </span>
                 <span className="tabular shrink-0 font-display text-xl font-bold text-gold">
+                  <Icon name="coin" className="mr-1 text-sm opacity-80" />
                   {budgetRemaining(p, state.config)} cr
                 </span>
               </div>
@@ -533,10 +555,12 @@ function TeamRow({
           )}
         </span>
         <span className={`tabular block text-sm ${leading ? 'text-pitch-950/80' : 'text-chalk-faint'}`}>
+          <Icon name="coin" className="mr-1 text-xs" />
           {t('board.maxOffer', { n: Math.max(0, maxBid(p, state.config)) })}
         </span>
       </span>
       <span className={`tabular shrink-0 font-display text-3xl font-bold ${leading ? '' : 'text-gold'}`}>
+        <Icon name="coin" className="mr-1.5 text-lg opacity-80" />
         {credits}
         <span className={`ml-1 text-sm font-semibold ${leading ? 'text-pitch-950/70' : 'text-chalk-dim'}`}>
           cr
