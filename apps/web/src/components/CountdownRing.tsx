@@ -78,6 +78,11 @@ export function CountdownRing({
         >
           {!hasRing ? '—' : formatCountdown(shownMs)}
         </span>
+        {accent && !paused && hasRing && (
+          <span className="mt-1 text-[7cqw] font-semibold uppercase tracking-[0.3em] text-chalk-dim">
+            {t('buzzer.seconds')}
+          </span>
+        )}
         {paused && (
           <span className="mt-1 text-[8cqw] font-semibold uppercase tracking-[0.3em] text-gold">
             {t('count.pause')}

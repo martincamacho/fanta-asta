@@ -1049,17 +1049,22 @@ function playerStatus(
   return { kind: 'available' };
 }
 
+const LISTONE_PAGE_SIZE = 20;
+
 /** Explorador del listone efectivo para cualquier participante: búsqueda, filtros por
- *  rol, orden, estado de cada jugador, ficha y watchlist con budget estimado. */
+ *  rol, salto por letra, orden, paginación client-side, estado de cada jugador,
+ *  ficha y watchlist con budget estimado. */
 function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
   const players = useStore((s) => s.players);
   const { t } = useT();
   const [query, setQuery] = useState('');
   const [role, setRole] = useState<Role | null>(null);
+  const [letter, setLetter] = useState<string | null>(null);
   const [sort, setSort] = useState<'quotazione' | 'name'>(
     state.config.hideValues ? 'name' : 'quotazione',
   );
   const [watchOnly, setWatchOnly] = useState(false);
+  const [page, setPage] = useState(0);
   const [sheet, setSheet] = useState<Player | null>(null);
   const entries = useWatchlist((s) => s.entries);
   const hideValues = state.config.hideValues;
@@ -1073,6 +1078,7 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
       (p) =>
         (!role || p.role === role) &&
         (!watchOnly || watchedIds.has(p.id)) &&
+        (!letter || normalize(p.name).startsWith(letter)) &&
         (!q || normalize(p.name).includes(q) || normalize(p.team).includes(q)),
     );
     out.sort((a, b) =>
@@ -1081,75 +1087,157 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
         : b.quotazione - a.quotazione || a.name.localeCompare(b.name),
     );
     return out;
-  }, [players, query, role, sort, hideValues, watchOnly, watchedIds]);
+  }, [players, query, role, sort, hideValues, watchOnly, watchedIds, letter]);
 
-  const shown = watchOnly ? list : list.slice(0, 60);
+  // Cualquier cambio de búsqueda/filtro/orden vuelve a la página 1.
+  useEffect(() => {
+    setPage(0);
+  }, [query, role, letter, sort, watchOnly]);
+
+  const totalPages = Math.max(1, Math.ceil(list.length / LISTONE_PAGE_SIZE));
+  const cur = Math.min(page, totalPages - 1);
+  const shown = watchOnly
+    ? list
+    : list.slice(cur * LISTONE_PAGE_SIZE, cur * LISTONE_PAGE_SIZE + LISTONE_PAGE_SIZE);
+
+  const pageBtn =
+    'flex h-11 min-w-11 items-center justify-center rounded-xl border chalk-line px-2 font-display text-xl font-bold text-chalk transition disabled:opacity-30 hover:bg-pitch-700';
 
   return (
     <div>
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={t('admin.searchPh')}
-        className="w-full rounded-lg border chalk-line bg-pitch-900 px-3 py-2 text-chalk placeholder:text-chalk-faint"
-      />
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <div className="flex gap-1">
-          {ROLES.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRole(role === r ? null : r)}
-              aria-pressed={role === r}
-              title={t(`role.${r}`)}
-              className={`h-8 w-8 rounded-full font-display text-base font-bold transition ${
-                role === r
-                  ? ROLE_STYLES[r].badge
-                  : `border chalk-line ${ROLE_STYLES[r].text} hover:bg-pitch-700`
-              }`}
+      {/* barra de búsqueda/filtros, sticky al scrollear la pestaña */}
+      <div className="sticky top-0 z-10 -mx-4 space-y-2 bg-[hsl(250_92%_52%/0.92)] px-4 pb-2 pt-1 backdrop-blur-md">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('admin.searchPh')}
+          className="w-full rounded-lg border chalk-line bg-pitch-900 px-3 py-2 text-chalk placeholder:text-chalk-faint"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1">
+            {ROLES.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRole(role === r ? null : r)}
+                aria-pressed={role === r}
+                title={t(`role.${r}`)}
+                className={`h-9 w-9 rounded-full font-display text-base font-bold transition ${
+                  role === r
+                    ? ROLE_STYLES[r].badge
+                    : `border chalk-line ${ROLE_STYLES[r].text} hover:bg-pitch-700`
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          {!hideValues && (
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as 'quotazione' | 'name')}
+              className="h-9 rounded-lg border chalk-line bg-pitch-900 px-2 text-sm text-chalk"
             >
-              {r}
-            </button>
-          ))}
-        </div>
-        {!hideValues && (
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as 'quotazione' | 'name')}
-            className="rounded-lg border chalk-line bg-pitch-900 px-2 py-1.5 text-sm text-chalk"
+              <option value="quotazione">{t('admin.byQuota')}</option>
+              <option value="name">{t('admin.byName')}</option>
+            </select>
+          )}
+          <button
+            type="button"
+            onClick={() => setWatchOnly((v) => !v)}
+            aria-pressed={watchOnly}
+            className={`h-9 rounded-full px-3 text-xs font-bold uppercase tracking-wider transition ${
+              watchOnly ? 'bg-gold text-pitch-950' : 'border chalk-line text-chalk-dim hover:text-chalk'
+            }`}
           >
-            <option value="quotazione">{t('admin.byQuota')}</option>
-            <option value="name">{t('admin.byName')}</option>
-          </select>
-        )}
-        <button
-          type="button"
-          onClick={() => setWatchOnly((v) => !v)}
-          aria-pressed={watchOnly}
-          className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition ${
-            watchOnly ? 'bg-gold text-pitch-950' : 'border chalk-line text-chalk-dim hover:text-chalk'
-          }`}
-        >
-          ★ {t('watch.only')}
-        </button>
+            ★ {t('watch.only')}
+          </button>
+        </div>
       </div>
 
       {watchOnly ? (
         <WatchlistView state={state} me={me} list={list} onSheet={setSheet} />
       ) : (
-        <ul className="mt-2 divide-y divide-chalk/10">
-          {shown.map((p) => (
-            <ListoneRow key={p.id} player={p} state={state} onSheet={() => setSheet(p)} />
-          ))}
-          {shown.length === 0 && (
-            <li className="py-6 text-center text-sm text-chalk-faint">{t('buzzer.noResults')}</li>
+        <>
+          {/* salto por letra */}
+          <div className="mt-2 flex flex-wrap gap-0.5">
+            {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) => {
+              const active = letter === l.toLowerCase();
+              return (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setLetter(active ? null : l.toLowerCase())}
+                  aria-pressed={active}
+                  className={`h-8 w-8 rounded text-xs font-bold ${
+                    active
+                      ? 'bg-gold text-pitch-950'
+                      : 'text-chalk-dim hover:bg-pitch-700 hover:text-chalk'
+                  }`}
+                >
+                  {l}
+                </button>
+              );
+            })}
+          </div>
+          <p className="tabular mt-1.5 text-xs font-semibold uppercase tracking-widest text-chalk-dim">
+            {t('listone.count', { n: list.length })}
+          </p>
+
+          <ul className="mt-1 divide-y divide-chalk/10">
+            {shown.map((p) => (
+              <ListoneRow key={p.id} player={p} state={state} onSheet={() => setSheet(p)} />
+            ))}
+            {shown.length === 0 && (
+              <li className="py-6 text-center text-sm text-chalk-faint">{t('buzzer.noResults')}</li>
+            )}
+          </ul>
+
+          {/* paginación (slice en memoria: instantánea) */}
+          {totalPages > 1 && (
+            <nav className="mt-2 flex items-center justify-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPage(0)}
+                disabled={cur === 0}
+                aria-label={t('listone.first')}
+                className={pageBtn}
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(Math.max(0, cur - 1))}
+                disabled={cur === 0}
+                aria-label={t('listone.prev')}
+                className={pageBtn}
+              >
+                ‹
+              </button>
+              <span className="tabular min-w-28 px-2 text-center text-sm font-semibold text-chalk">
+                {t('listone.page', { p: cur + 1, total: totalPages })}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage(Math.min(totalPages - 1, cur + 1))}
+                disabled={cur >= totalPages - 1}
+                aria-label={t('listone.next')}
+                className={pageBtn}
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(totalPages - 1)}
+                disabled={cur >= totalPages - 1}
+                aria-label={t('listone.last')}
+                className={pageBtn}
+              >
+                »
+              </button>
+            </nav>
           )}
-          {list.length > shown.length && (
-            <li className="py-2 text-center text-xs text-chalk-faint">
-              {t('admin.morePlayers', { n: list.length - shown.length })}
-            </li>
-          )}
-        </ul>
+        </>
       )}
 
       {sheet && (
@@ -1181,28 +1269,33 @@ function ListoneRow({
   const status = playerStatus(state, p.id);
   const sold = status.kind === 'sold';
   return (
-    <li className={`flex items-center gap-2 py-2 ${sold ? 'opacity-60' : ''}`}>
-      <WatchStar player={p} />
-      <PlayerImg player={p} className="w-9 shrink-0" />
+    <li className={`flex items-center gap-2 py-2.5 ${sold ? 'opacity-55' : ''}`}>
+      <WatchStar player={p} className="flex h-10 w-10 items-center justify-center" />
+      <PlayerImg player={p} className="w-11 shrink-0" />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <RoleBadge role={p.role} size="sm" />
-          <span className={`truncate text-sm text-chalk ${sold ? 'line-through' : ''}`}>
+          <span className={`truncate text-[15px] font-semibold text-chalk ${sold ? 'line-through' : ''}`}>
             {p.name}
           </span>
-          <span className="truncate text-xs text-chalk-faint">{p.team}</span>
         </span>
-        <span className="mt-0.5 block text-[11px] text-chalk-faint">
-          {status.kind === 'sold'
-            ? t('listone.sold', { name: status.name, n: status.price })
-            : status.kind === 'richiama'
-              ? t('admin.richiamaTag')
-              : t('listone.available')}
+        <span className="mt-0.5 block truncate text-xs text-chalk-faint">
+          {p.team}
+          {' · '}
+          {status.kind === 'sold' ? (
+            t('listone.sold', { name: status.name, n: status.price })
+          ) : status.kind === 'richiama' ? (
+            <span className="rounded bg-role-p/20 px-1.5 py-px font-bold uppercase tracking-wider text-role-p">
+              {t('admin.richiamaTag')}
+            </span>
+          ) : (
+            t('listone.available')
+          )}
         </span>
       </span>
       <WatchMaxInput player={p} />
       {!state.config.hideValues && (
-        <span className="tabular w-8 shrink-0 text-right font-display text-lg font-bold text-chalk-dim">
+        <span className="tabular shrink-0 rounded-lg bg-pitch-800 px-2 py-1 text-right font-display text-lg font-bold text-chalk-dim">
           {p.quotazione}
         </span>
       )}
@@ -1211,7 +1304,7 @@ function ListoneRow({
         onClick={onSheet}
         aria-label={t('admin.fichaOf', { name: p.name })}
         title={t('admin.seeFicha')}
-        className="shrink-0 rounded px-1.5 py-1 text-xs font-bold text-gold hover:bg-pitch-700/60"
+        className="flex h-10 shrink-0 items-center rounded-lg px-2 text-xs font-bold uppercase text-gold hover:bg-pitch-700/60"
       >
         {t('admin.ficha')}
       </button>

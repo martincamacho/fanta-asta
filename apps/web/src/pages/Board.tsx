@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { budgetRemaining, type Participant, type RoomState } from '@fanta/shared';
+import {
+  budgetRemaining,
+  maxBid,
+  nextMinBid,
+  rosterComplete,
+  type Participant,
+  type RoomState,
+} from '@fanta/shared';
 import { useStore } from '../store';
 import { useAuth } from '../authStore';
 import { useT } from '../i18n';
@@ -89,21 +96,21 @@ export default function Board() {
     return <NotLeagueMember leagueName={guard.leagueName} />;
   if (guard.status === 'checking')
     return (
-      <div className="pitch-bg flex min-h-dvh items-center justify-center text-2xl text-chalk-dim">
+      <div className="theme-buzz buzz-bg flex min-h-dvh items-center justify-center text-2xl text-chalk-dim">
         {t('board.searching')}
       </div>
     );
   if (guard.status === 'missing') return <RoomMissing code={code} />;
   if (!state)
     return (
-      <div className="pitch-bg flex min-h-dvh items-center justify-center text-2xl text-chalk-dim">
+      <div className="theme-buzz buzz-bg flex min-h-dvh items-center justify-center text-2xl text-chalk-dim">
         {t('board.connecting')}
       </div>
     );
 
   return (
-    <div className="pitch-bg flex h-dvh flex-col overflow-hidden">
-      <header className="flex items-baseline justify-between border-b chalk-line px-8 py-3">
+    <div className="theme-buzz buzz-bg flex min-h-dvh flex-col lg:h-dvh lg:overflow-hidden">
+      <header className="flex items-baseline justify-between px-8 py-3">
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-chalk">
           {state.config.leagueName}
           {guard.status === 'ok' &&
@@ -122,19 +129,32 @@ export default function Board() {
           </p>
         </div>
       </header>
-      <main className="min-h-0 flex-1">
+      <main className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 lg:overflow-hidden">
         {state.finishedAt !== null ? (
           <BoardFinished state={state} />
-        ) : state.auction.phase === 'idle' ? (
-          <BoardIdle state={state} />
         ) : (
-          <BoardAuction state={state} />
+          <div className="grid h-full gap-6 lg:grid-cols-[1.05fr_1fr_1.05fr]">
+            <PlayerColumn state={state} />
+            <BanditoreColumn state={state} />
+            <TeamsColumn state={state} />
+          </div>
         )}
       </main>
-      <AssignmentsPanel className="fixed bottom-16 left-4 z-30 w-96 max-w-[calc(100vw-2rem)] backdrop-blur" />
-      <CreditsRail state={state} />
+      <AssignmentsPanel className="fixed bottom-6 left-6 z-30 w-96 max-w-[calc(100vw-2rem)] backdrop-blur" />
       {drawOrder && <DrawOverlay state={state} order={drawOrder} />}
     </div>
+  );
+}
+
+/** Panel indigo de columna, con el título afuera como en el software oficial. */
+function Column({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex min-h-0 flex-col">
+      <p className="mb-2 px-1 text-xl font-semibold text-chalk">{title}</p>
+      <div className="min-h-0 flex-1 overflow-hidden rounded-3xl bg-pitch-950/80 p-6">
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -143,18 +163,18 @@ export default function Board() {
 function DrawOverlay({ state, order }: { state: RoomState; order: string[] }) {
   const { t } = useT();
   return (
-    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-8 bg-[hsl(230_28%_8%/0.94)] px-10 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-8 bg-[hsl(251_70%_9%/0.94)] px-10 backdrop-blur-sm">
       <p className="animate-rise font-display text-6xl font-bold uppercase tracking-wide text-white">
-        {t('board.drawTitle1')} <span className="text-secondary">{t('board.drawTitle2')}</span>
+        {t('board.drawTitle1')} <span className="text-gold">{t('board.drawTitle2')}</span>
       </p>
       <ol className="flex max-w-5xl flex-wrap items-center justify-center gap-4">
         {order.map((id, i) => (
           <li
             key={id}
-            className="animate-rise flex items-center gap-3 rounded-2xl border-2 border-primary/60 bg-pitch-800 px-6 py-4"
+            className="animate-rise flex items-center gap-3 rounded-2xl border-2 border-gold/50 bg-pitch-800 px-6 py-4"
             style={{ animationDelay: `${0.4 + i * 0.6}s`, animationDuration: '0.45s' }}
           >
-            <span className="font-display text-4xl font-bold text-secondary">
+            <span className="font-display text-4xl font-bold text-gold">
               {t('board.pos', { n: i + 1 })}
             </span>
             <span className="max-w-[16rem] truncate font-display text-3xl font-semibold text-chalk">
@@ -173,27 +193,182 @@ function DrawOverlay({ state, order }: { state: RoomState; order: string[] }) {
   );
 }
 
-/* ————— idle: código + QR + participantes ————— */
+/* ————— columna izquierda: calciatore ————— */
 
-function BoardIdle({ state }: { state: RoomState }) {
+function PlayerColumn({ state }: { state: RoomState }) {
+  const players = useStore((s) => s.players);
   const { t } = useT();
-  const callerId = currentCallerId(state);
+  const player = state.auction.playerId !== null ? players.get(state.auction.playerId) : undefined;
+  const profile = useProfile(state.config.hideValues || !player ? null : player.id);
+
   return (
-    <div className="grid h-full grid-cols-[minmax(20rem,2fr)_3fr] items-center gap-8 px-10">
-      <div className="flex flex-col items-center gap-6 text-center">
-        {callerId && (
-          <p className="animate-rise rounded-xl bg-primary px-5 py-2 font-display text-3xl font-bold uppercase text-white">
-            {t('board.calls', { name: participantName(state, callerId) })}
+    <Column title={t('board.colPlayer')}>
+      {player ? (
+        <div key={player.id} className="animate-rise flex h-full flex-col items-center justify-center gap-4 text-center">
+          <PlayerImg player={player} className="w-[clamp(10rem,18vh,16rem)]" />
+          <div className="min-w-0">
+            <p className="text-sm text-chalk-faint">#{player.id}</p>
+            <h2 className="mt-1 font-display text-[clamp(2.6rem,4.5vw,4.5rem)] font-bold uppercase leading-[0.95] text-chalk">
+              {player.name}
+            </h2>
+            <p className="mt-2 text-2xl text-chalk-dim">
+              {player.team}
+              {!state.config.hideValues && (
+                <>
+                  {' '}
+                  · {t('board.quotazione')}{' '}
+                  <span className="tabular font-semibold text-chalk">{player.quotazione}</span>
+                </>
+              )}
+            </p>
+            <div className="mt-3 flex justify-center">
+              <RoleBadge role={player.role} size="lg" full />
+            </div>
+            {!state.config.hideValues && (
+              <div className="mt-3 flex justify-center">
+                <StatBadges profile={profile} />
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex h-full flex-col items-center justify-center gap-5 text-center">
+          <p className="text-base font-semibold uppercase tracking-[0.35em] text-chalk-dim">
+            {t('board.enterWithPhone')}
           </p>
+          <div className="rounded-2xl bg-chalk p-4">
+            <QRCodeSVG value={buzzerUrl(state.code)} size={190} bgColor="#eef0f7" fgColor="#1b1147" />
+          </div>
+          <p className="font-display text-[clamp(3.5rem,5vw,5.5rem)] font-bold uppercase leading-none tracking-[0.2em] text-gold">
+            {state.code}
+          </p>
+          <p className="text-chalk-dim">{buzzerUrl(state.code).replace(/^https?:\/\//, '')}</p>
+        </div>
+      )}
+    </Column>
+  );
+}
+
+/* ————— columna central: banditore ————— */
+
+function BanditoreColumn({ state }: { state: RoomState }) {
+  const players = useStore((s) => s.players);
+  const eventSeq = useStore((s) => s.eventSeq);
+  const { t } = useT();
+  const phase = state.auction.phase;
+  const bid = currentBid(state);
+  const callerId = currentCallerId(state);
+  const active = phase === 'called' || phase === 'bidding';
+  const paused = state.auction.pausedRemainingMs !== null;
+  const premi = state.config.auctionMode === 'premi_parla';
+
+  return (
+    <Column title={t('board.colBanditore')}>
+      <div className="flex h-full flex-col items-center justify-center gap-6">
+        <CountdownRing
+          deadline={active ? state.auction.deadline : null}
+          durationMs={auctionTimerMs(state)}
+          pausedMs={active ? state.auction.pausedRemainingMs : null}
+          className="h-[clamp(9rem,22vh,14rem)] w-[clamp(9rem,22vh,14rem)]"
+          accent
+        />
+
+        {phase === 'sold' ? (
+          <div className="animate-sold text-center">
+            <p className="font-display text-[clamp(2.6rem,4.5vw,4.5rem)] font-bold uppercase leading-none text-gold animate-ticker-glow">
+              {t('board.sold')}
+            </p>
+            <p className="mt-3 text-2xl text-chalk">
+              {t('board.soldTo')}{' '}
+              <span className="font-display font-bold">
+                {participantName(state, state.auction.winnerId)}
+              </span>
+            </p>
+            <p className="tabular mt-1 font-display text-[clamp(3.5rem,6vw,6rem)] font-bold leading-none text-gold">
+              {bid?.amount ?? 0}
+            </p>
+          </div>
+        ) : phase === 'unsold' ? (
+          <div className="animate-rise text-center">
+            <p className="font-display text-[clamp(2.6rem,4.5vw,4.5rem)] font-bold uppercase leading-none text-chalk-dim">
+              {t('board.unsold')}
+            </p>
+            <p className="mt-2 text-xl text-chalk-faint">{t('board.unsoldText')}</p>
+          </div>
+        ) : active ? (
+          <div className="w-full max-w-md rounded-2xl bg-pitch-800/80 px-6 py-5 text-center">
+            {paused && (
+              <p className="mb-2 inline-block rounded-full bg-gold/20 px-4 py-1 text-sm font-bold uppercase tracking-widest text-gold">
+                {t('board.paused')}
+              </p>
+            )}
+            {bid ? (
+              premi ? (
+                <>
+                  <p className="text-sm font-semibold uppercase tracking-[0.3em] text-chalk-dim">
+                    {t('board.word')}
+                  </p>
+                  <p className="mt-1 truncate font-display text-4xl font-bold uppercase text-gold">
+                    {t('board.wordTo', { name: participantName(state, bid.participantId) })}
+                  </p>
+                  <p key={eventSeq} className="tabular animate-bid-pop mt-1 font-display text-[clamp(3rem,5vw,5rem)] font-bold leading-none text-gold">
+                    {bid.amount}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold uppercase tracking-[0.3em] text-chalk-dim">
+                    {t('board.currentBid')}
+                  </p>
+                  <p
+                    key={eventSeq}
+                    className="tabular animate-bid-pop font-display text-[clamp(4rem,8vw,7.5rem)] font-bold leading-none text-gold"
+                  >
+                    {bid.amount}
+                  </p>
+                  <p className="mt-1 truncate font-display text-3xl font-semibold text-chalk">
+                    {participantName(state, bid.participantId)}
+                  </p>
+                </>
+              )
+            ) : (
+              <>
+                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-chalk-dim">
+                  {t('board.baseAsta')}
+                </p>
+                <p className="tabular font-display text-[clamp(4rem,8vw,7.5rem)] font-bold leading-none text-gold">
+                  {nextMinBid(state, players)}
+                </p>
+                <p className="mt-1 font-display text-2xl font-semibold uppercase text-chalk-faint">
+                  {t('board.whoOpens')}
+                </p>
+              </>
+            )}
+            <BidFeed state={state} />
+          </div>
+        ) : (
+          <div className="text-center">
+            {callerId ? (
+              <p className="animate-rise rounded-xl bg-gold px-5 py-2 font-display text-3xl font-bold uppercase text-pitch-950">
+                {t('board.calls', { name: participantName(state, callerId) })}
+              </p>
+            ) : (
+              <p className="text-xl uppercase tracking-[0.2em] text-chalk-faint">
+                {t('board.teamsInRoom', { n: state.participants.length })}
+              </p>
+            )}
+          </div>
         )}
-        {state.callOrder.length > 0 && (
+
+        {/* franja del orden de turnos */}
+        {state.callOrder.length > 0 && phase === 'idle' && (
           <ol className="flex max-w-md flex-wrap justify-center gap-1.5">
             {state.callOrder.map((id, i) => (
               <li
                 key={id}
                 className={`rounded-lg px-2 py-0.5 text-sm ${
                   i === state.turnIndex
-                    ? 'bg-primary font-bold text-white'
+                    ? 'bg-gold font-bold text-pitch-950'
                     : 'border chalk-line text-chalk-dim'
                 }`}
               >
@@ -202,160 +377,8 @@ function BoardIdle({ state }: { state: RoomState }) {
             ))}
           </ol>
         )}
-        <p className="text-lg font-semibold uppercase tracking-[0.4em] text-chalk-dim">
-          {t('board.enterWithPhone')}
-        </p>
-        <div className="rounded-2xl bg-chalk p-5">
-          <QRCodeSVG value={buzzerUrl(state.code)} size={230} bgColor="#eef0f7" fgColor="#131627" />
-        </div>
-        <p className="font-display text-[6rem] font-bold uppercase leading-none tracking-[0.25em] text-gold">
-          {state.code}
-        </p>
-        <p className="text-chalk-dim">{buzzerUrl(state.code).replace(/^https?:\/\//, '')}</p>
       </div>
-      <div className="max-h-full overflow-y-auto py-8">
-        <p className="mb-4 text-sm font-semibold uppercase tracking-[0.3em] text-chalk-dim">
-          {t('board.teamsInRoom', { n: state.participants.length })}
-        </p>
-        {state.participants.length === 0 ? (
-          <p className="text-2xl text-chalk-faint">{t('board.nobodyYet')}</p>
-        ) : (
-          <ul className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-            {state.participants.map((p) => (
-              <li key={p.id} className="animate-rise rounded-xl border chalk-line bg-pitch-800/70 px-5 py-4">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full ${p.connected ? 'bg-role-d' : 'bg-chalk-faint'}`}
-                  />
-                  <span className="truncate font-display text-2xl font-semibold text-chalk">
-                    {p.name}
-                  </span>
-                </div>
-                <p className="tabular mt-1 font-display text-3xl font-bold text-gold">
-                  {budgetRemaining(p, state.config)}
-                  <span className="ml-1 text-base font-semibold text-chalk-dim">cr</span>
-                  {p.budgetBonus !== 0 && (
-                    <span
-                      className={`ml-2 align-middle font-body text-sm font-semibold ${
-                        p.budgetBonus > 0 ? 'text-success' : 'text-danger'
-                      }`}
-                    >
-                      {state.config.budget} {p.budgetBonus > 0 ? '+' : '−'}
-                      {Math.abs(p.budgetBonus)}
-                    </span>
-                  )}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ————— subasta / sold / unsold ————— */
-
-function BoardAuction({ state }: { state: RoomState }) {
-  const players = useStore((s) => s.players);
-  const eventSeq = useStore((s) => s.eventSeq);
-  const { t } = useT();
-  const player = state.auction.playerId !== null ? players.get(state.auction.playerId) : undefined;
-  const profile = useProfile(state.config.hideValues ? null : (player?.id ?? null));
-  if (!player) return null;
-  const phase = state.auction.phase;
-  const bid = currentBid(state);
-
-  return (
-    <div className="relative grid h-full grid-cols-[1fr_auto_1fr] items-center gap-10 px-12">
-      {/* jugador gigante */}
-      <div key={player.id} className="animate-rise flex items-center justify-end gap-8">
-        <div className="text-right">
-          <RoleBadge role={player.role} size="lg" full />
-          <h2 className="mt-2 font-display text-[clamp(3rem,7vw,7rem)] font-bold uppercase leading-[0.9] text-chalk">
-            {player.name}
-          </h2>
-          <p className="mt-3 text-2xl text-chalk-dim">
-            {player.team}
-            {!state.config.hideValues && (
-              <>
-                {' '}
-                · {t('board.quotazione')}{' '}
-                <span className="tabular font-semibold text-chalk">{player.quotazione}</span>
-              </>
-            )}
-          </p>
-          {!state.config.hideValues && (
-            <div className="mt-3 flex justify-end">
-              <StatBadges profile={profile} />
-            </div>
-          )}
-        </div>
-        <PlayerImg player={player} className="w-[clamp(12rem,20vw,20rem)] shrink-0" />
-      </div>
-
-      {/* countdown */}
-      <div className="flex flex-col items-center gap-4">
-        <CountdownRing
-          deadline={phase === 'sold' || phase === 'unsold' ? null : state.auction.deadline}
-          durationMs={auctionTimerMs(state)}
-          pausedMs={phase === 'sold' || phase === 'unsold' ? null : state.auction.pausedRemainingMs}
-          className="h-[clamp(10rem,24vh,16rem)] w-[clamp(10rem,24vh,16rem)]"
-          accent
-        />
-      </div>
-
-      {/* oferta + feed */}
-      <div className="min-w-0">
-        {phase === 'sold' ? (
-          <div className="animate-sold">
-            <p className="font-display text-[clamp(3rem,6vw,6rem)] font-bold uppercase leading-none text-gold animate-ticker-glow">
-              {t('board.sold')}
-            </p>
-            <p className="mt-4 text-3xl text-chalk">
-              {t('board.soldTo')}{' '}
-              <span className="font-display font-bold">
-                {participantName(state, state.auction.winnerId)}
-              </span>
-            </p>
-            <p className="tabular mt-2 font-display text-[clamp(4rem,8vw,8rem)] font-bold leading-none text-gold">
-              {bid?.amount ?? 0}
-            </p>
-          </div>
-        ) : phase === 'unsold' ? (
-          <div className="animate-rise">
-            <p className="font-display text-[clamp(3rem,6vw,6rem)] font-bold uppercase leading-none text-chalk-dim">
-              {t('board.unsold')}
-            </p>
-            <p className="mt-3 text-2xl text-chalk-faint">{t('board.unsoldText')}</p>
-          </div>
-        ) : (
-          <>
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-chalk-dim">
-              {state.config.auctionMode === 'premi_parla' ? t('board.word') : t('board.currentBid')}
-            </p>
-            {bid ? (
-              <>
-                <p
-                  key={eventSeq}
-                  className="tabular animate-bid-pop font-display text-[clamp(5rem,11vw,11rem)] font-bold leading-none text-gold"
-                >
-                  {bid.amount}
-                </p>
-                <p className="mt-1 truncate font-display text-4xl font-semibold text-chalk">
-                  {participantName(state, bid.participantId)}
-                </p>
-              </>
-            ) : (
-              <p className="mt-2 font-display text-5xl font-semibold uppercase text-chalk-faint">
-                {t('board.whoOpens')}
-              </p>
-            )}
-            <BidFeed state={state} />
-          </>
-        )}
-      </div>
-    </div>
+    </Column>
   );
 }
 
@@ -423,27 +446,44 @@ function BoardFinished({ state }: { state: RoomState }) {
   );
 }
 
-/* ————— rail de créditos, siempre visible ————— */
+/* ————— columna derecha: squadre ————— */
 
-function CreditsRail({ state }: { state: RoomState }) {
+function TeamsColumn({ state }: { state: RoomState }) {
+  const { t } = useT();
   const bid = currentBid(state);
   const active = state.auction.phase === 'called' || state.auction.phase === 'bidding';
+  const leadingId = active ? (bid?.participantId ?? null) : null;
+  const teams = [...state.participants].sort(
+    (a, b) =>
+      budgetRemaining(b, state.config) - budgetRemaining(a, state.config) ||
+      a.name.localeCompare(b.name),
+  );
+  const soldCount = state.participants.reduce((sum, p) => sum + p.roster.length, 0);
+  const soldIds = new Set(state.participants.flatMap((p) => p.roster.map((e) => e.playerId)));
+  const richiamaCount = state.unsoldPlayerIds.filter((id) => !soldIds.has(id)).length;
+
   return (
-    <footer className="flex gap-2 overflow-x-auto border-t chalk-line px-6 py-3">
-      {state.participants.map((p) => (
-        <RailChip
-          key={p.id}
-          participant={p}
-          state={state}
-          leading={active && bid?.participantId === p.id}
-        />
-      ))}
-    </footer>
+    <Column title={t('board.colTeams')}>
+      <div className="flex h-full flex-col">
+        {teams.length === 0 ? (
+          <p className="py-8 text-center text-2xl text-chalk-faint">{t('board.nobodyYet')}</p>
+        ) : (
+          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+            {teams.map((p) => (
+              <TeamRow key={p.id} participant={p} state={state} leading={p.id === leadingId} />
+            ))}
+          </ul>
+        )}
+        <p className="tabular mt-3 border-t chalk-line pt-2 text-center text-sm font-semibold uppercase tracking-widest text-chalk-dim">
+          {t('board.counter', { x: soldCount, y: richiamaCount })}
+        </p>
+      </div>
+    </Column>
   );
 }
 
-function RailChip({
-  participant,
+function TeamRow({
+  participant: p,
   state,
   leading,
 }: {
@@ -451,23 +491,39 @@ function RailChip({
   state: RoomState;
   leading: boolean;
 }) {
+  const { t } = useT();
+  const complete = rosterComplete(p, state.config);
+  const credits = budgetRemaining(p, state.config);
   return (
-    <div
-      className={`flex shrink-0 items-baseline gap-2 rounded-lg px-3 py-1.5 ${
-        leading ? 'bg-gold text-pitch-950' : 'bg-pitch-800'
+    <li
+      className={`animate-rise flex items-center gap-3 rounded-2xl px-4 py-3 ${
+        leading ? 'bg-gold text-pitch-950' : `bg-pitch-800/80 ${complete ? 'opacity-60' : ''}`
       }`}
     >
       <span
-        className={`self-center h-2 w-2 rounded-full ${
-          participant.connected ? (leading ? 'bg-pitch-950' : 'bg-role-d') : 'bg-chalk-faint'
+        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+          p.connected ? (leading ? 'bg-pitch-950' : 'bg-success') : 'bg-chalk-faint'
         }`}
       />
-      <span className={`max-w-[12rem] truncate font-display text-xl font-semibold ${leading ? '' : 'text-chalk'}`}>
-        {participant.name}
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate font-display text-2xl font-semibold ${leading ? '' : 'text-chalk'}`}>
+          {p.name}
+          {complete && (
+            <span className="ml-2 align-middle text-base" title={t('bidTitle.roster_full')}>
+              ✓
+            </span>
+          )}
+        </span>
+        <span className={`tabular block text-sm ${leading ? 'text-pitch-950/80' : 'text-chalk-faint'}`}>
+          {t('board.maxOffer', { n: Math.max(0, maxBid(p, state.config)) })}
+        </span>
       </span>
-      <span className={`tabular font-display text-xl font-bold ${leading ? '' : 'text-gold'}`}>
-        {budgetRemaining(participant, state.config)}
+      <span className={`tabular shrink-0 font-display text-3xl font-bold ${leading ? '' : 'text-gold'}`}>
+        {credits}
+        <span className={`ml-1 text-sm font-semibold ${leading ? 'text-pitch-950/70' : 'text-chalk-dim'}`}>
+          cr
+        </span>
       </span>
-    </div>
+    </li>
   );
 }
