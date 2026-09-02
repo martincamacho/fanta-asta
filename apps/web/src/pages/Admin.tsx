@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ROLES,
@@ -89,7 +89,7 @@ export default function Admin() {
 
 function Center({ children }: { children: ReactNode }) {
   return (
-    <div className="pitch-bg flex min-h-dvh items-center justify-center px-6 text-chalk-dim">
+    <div className="theme-buzz buzz-bg flex min-h-dvh items-center justify-center px-6 text-chalk-dim">
       {children}
     </div>
   );
@@ -112,8 +112,8 @@ function AdminLive({ state }: { state: RoomState }) {
   }
 
   return (
-    <div className="site-bg theme-light min-h-dvh">
-      <header className="theme-dark sticky top-0 z-30 flex flex-wrap items-center gap-x-6 gap-y-2 bg-navy px-6 py-3 shadow-md">
+    <div className="theme-buzz buzz-bg min-h-dvh">
+      <header className="sticky top-0 z-30 flex flex-wrap items-center gap-x-6 gap-y-2 bg-pitch-950/90 px-6 py-3 shadow-md backdrop-blur-md">
         <div className="flex items-center gap-2">
           <span
             className={`h-2.5 w-2.5 rounded-full ${
@@ -128,7 +128,7 @@ function AdminLive({ state }: { state: RoomState }) {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <span className="font-display text-4xl font-bold uppercase tracking-[0.3em] text-gold">
+          <span className="font-display text-5xl font-bold uppercase tracking-[0.3em] text-gold">
             {state.code}
           </span>
           <LangSwitcher compact />
@@ -143,7 +143,7 @@ function AdminLive({ state }: { state: RoomState }) {
             target="_blank"
             rel="noopener"
             title={t('admin.myBuzzerTip')}
-            className={btnGhost}
+            className="rounded-lg border-2 border-gold/70 px-3 py-1.5 text-sm font-bold uppercase text-gold transition hover:bg-gold/10"
           >
             {t('admin.myBuzzer')}
           </Link>
@@ -169,7 +169,7 @@ function AdminLive({ state }: { state: RoomState }) {
         </div>
         <div className="min-w-0 space-y-6">
           {state.finishedAt !== null ? (
-            <section className="rounded-2xl border-2 border-gold/50 bg-pitch-800/70 px-6 py-5">
+            <section className="rounded-2xl border-2 border-gold/50 bg-pitch-950/80 px-6 py-5">
               <p className="font-display text-3xl font-bold uppercase text-gold">
                 {t('admin.finishedTitle')}
               </p>
@@ -264,7 +264,7 @@ function TurnPanel({ state }: { state: RoomState }) {
   const { t } = useT();
   const caller = currentCallerId(state);
   return (
-    <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
+    <section className="rounded-2xl border chalk-line bg-pitch-950/70 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-2xl font-bold uppercase text-chalk">
@@ -329,7 +329,7 @@ function Listone({ state }: { state: RoomState }) {
   const [query, setQuery] = useState('');
   const [role, setRole] = useState<Role | null>(null);
   const [team, setTeam] = useState('');
-  const [sort, setSort] = useState<'quotazione' | 'name'>('quotazione');
+  const [sort, setSort] = useState<'quotazione' | 'name' | 'role'>('quotazione');
   const [letter, setLetter] = useState<string | null>(null);
   const [candidate, setCandidate] = useState<Player | null>(null);
   const [sheet, setSheet] = useState<Player | null>(null);
@@ -356,9 +356,15 @@ function Listone({ state }: { state: RoomState }) {
         (!letter || normalize(p.name).startsWith(letter)) &&
         (!q || normalize(p.name).includes(q) || normalize(p.team).includes(q)),
     );
-    out.sort((a, b) =>
-      sort === 'name' ? a.name.localeCompare(b.name) : b.quotazione - a.quotazione,
-    );
+    out.sort((a, b) => {
+      // "Ruolo": desde el arco — P → D → C → A; adentro por quotazione desc.
+      if (sort === 'role') {
+        const d = ROLES.indexOf(a.role) - ROLES.indexOf(b.role);
+        if (d !== 0) return d;
+        return b.quotazione - a.quotazione || a.name.localeCompare(b.name);
+      }
+      return sort === 'name' ? a.name.localeCompare(b.name) : b.quotazione - a.quotazione;
+    });
     return out;
   }, [players, sold, inAuction, query, role, team, letter, sort]);
 
@@ -370,7 +376,7 @@ function Listone({ state }: { state: RoomState }) {
   const busy = inAuction !== null;
 
   return (
-    <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
+    <section className="rounded-2xl border chalk-line bg-pitch-950/70 p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="font-display text-2xl font-bold uppercase text-chalk">
           {t('admin.listone')}
@@ -421,11 +427,12 @@ function Listone({ state }: { state: RoomState }) {
         </select>
         <select
           value={sort}
-          onChange={(e) => setSort(e.target.value as 'quotazione' | 'name')}
+          onChange={(e) => setSort(e.target.value as 'quotazione' | 'name' | 'role')}
           className={inputCls}
         >
           <option value="quotazione">{t('admin.byQuota')}</option>
           <option value="name">{t('admin.byName')}</option>
+          <option value="role">{t('admin.byRole')}</option>
         </select>
       </div>
 
@@ -465,8 +472,17 @@ function Listone({ state }: { state: RoomState }) {
       {sheet && <PlayerSheet player={sheet} onClose={() => setSheet(null)} />}
 
       <ul className="max-h-[26rem] divide-y divide-chalk/5 overflow-y-auto">
-        {list.slice(0, 100).map((p) => (
-          <li key={p.id} className="flex items-center gap-1">
+        {list.slice(0, 100).map((p, i, arr) => (
+          <Fragment key={p.id}>
+          {sort === 'role' && arr[i - 1]?.role !== p.role && (
+            <li className="flex items-center gap-2 pb-1 pt-3">
+              <RoleBadge role={p.role} size="sm" />
+              <span className={`text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[p.role].text}`}>
+                {t(`role.${p.role}`)}
+              </span>
+            </li>
+          )}
+          <li className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => setCandidate(p)}
@@ -496,6 +512,7 @@ function Listone({ state }: { state: RoomState }) {
               {t('admin.ficha')}
             </button>
           </li>
+          </Fragment>
         ))}
         {list.length === 0 && (
           <li className="py-6 text-center text-sm text-chalk-faint">{t('admin.noPlayers')}</li>
@@ -740,7 +757,7 @@ function ListoneUpload({ state }: { state: RoomState }) {
   }
 
   return (
-    <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
+    <section className="rounded-2xl border chalk-line bg-pitch-950/70 p-5">
       <h2 className="font-display text-2xl font-bold uppercase text-chalk">
         {t('admin.listoneOwn')}
       </h2>
@@ -782,7 +799,7 @@ function Richiama({ state }: { state: RoomState }) {
   if (list.length === 0) return null;
   const busy = state.auction.phase === 'called' || state.auction.phase === 'bidding';
   return (
-    <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
+    <section className="rounded-2xl border chalk-line bg-pitch-950/70 p-5">
       <h2 className="mb-1 font-display text-2xl font-bold uppercase text-chalk">
         {t('admin.richiama')}
       </h2>
@@ -823,7 +840,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
 
   if (phase === 'idle' || !player) {
     return (
-      <section className="flex items-center justify-between rounded-2xl border chalk-line bg-pitch-800/50 px-6 py-5">
+      <section className="flex items-center justify-between rounded-2xl border chalk-line bg-pitch-950/70 px-6 py-5">
         <p className="font-display text-2xl font-bold uppercase text-chalk-dim">
           {t('admin.noAuction')}
         </p>
@@ -833,7 +850,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
   }
 
   return (
-    <section className="rounded-2xl border-2 border-gold/40 bg-pitch-800/70 p-6">
+    <section className="rounded-2xl border-2 border-gold/40 bg-pitch-950/80 p-6">
       <div className="flex flex-wrap items-start gap-6">
         <PlayerImg player={player} className="w-28 shrink-0" />
         <div className="min-w-0 flex-1">
@@ -875,6 +892,7 @@ function AuctionPanel({ state }: { state: RoomState }) {
           durationMs={auctionTimerMs(state)}
           pausedMs={phase === 'sold' || phase === 'unsold' ? null : state.auction.pausedRemainingMs}
           className="h-32 w-32 shrink-0"
+          accent
         />
       </div>
 
@@ -962,7 +980,7 @@ function SpokenBid({ state }: { state: RoomState }) {
 
   return (
     <form
-      className="mt-3 flex flex-wrap items-end gap-3 rounded-xl border-2 border-primary/50 bg-pitch-900 p-4"
+      className="mt-3 flex flex-wrap items-end gap-3 rounded-xl border-2 border-gold/50 bg-pitch-900 p-4"
       onSubmit={(e: FormEvent) => {
         e.preventDefault();
         if (amount <= 0) return;
@@ -971,7 +989,7 @@ function SpokenBid({ state }: { state: RoomState }) {
       }}
     >
       <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+        <p className="text-xs font-semibold uppercase tracking-widest text-gold">
           {t('admin.wordLabel')}
         </p>
         <p className="truncate font-display text-2xl font-bold text-chalk">
@@ -997,7 +1015,7 @@ function SpokenBid({ state }: { state: RoomState }) {
       <button
         type="submit"
         disabled={amount <= 0}
-        className="rounded-xl bg-primary px-6 py-2.5 font-display text-xl font-bold uppercase text-white disabled:opacity-40"
+        className="rounded-xl bg-gold px-6 py-2.5 font-display text-xl font-bold uppercase text-pitch-950 disabled:opacity-40"
       >
         {t('admin.wordSet')}
       </button>
@@ -1136,7 +1154,7 @@ function ParticipantsPanel({ state }: { state: RoomState }) {
   const [adjust, setAdjust] = useState<Adjust | null>(null);
 
   return (
-    <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
+    <section className="rounded-2xl border chalk-line bg-pitch-950/70 p-5">
       <h2 className="mb-1 font-display text-2xl font-bold uppercase text-chalk">
         {t('admin.participants', { n: state.participants.length })}
       </h2>
@@ -1652,7 +1670,7 @@ function AdjustConfirm({
 function ConfigPanel({ state, locked }: { state: RoomState; locked: boolean }) {
   const { t } = useT();
   return (
-    <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
+    <section className="rounded-2xl border chalk-line bg-pitch-950/70 p-5">
       <h2 className="mb-1 font-display text-2xl font-bold uppercase text-chalk">
         {t('admin.configTitle')}
       </h2>

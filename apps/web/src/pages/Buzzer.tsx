@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   ROLES,
@@ -1060,7 +1060,7 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
   const [query, setQuery] = useState('');
   const [role, setRole] = useState<Role | null>(null);
   const [letter, setLetter] = useState<string | null>(null);
-  const [sort, setSort] = useState<'quotazione' | 'name'>(
+  const [sort, setSort] = useState<'quotazione' | 'name' | 'role'>(
     state.config.hideValues ? 'name' : 'quotazione',
   );
   const [watchOnly, setWatchOnly] = useState(false);
@@ -1081,11 +1081,19 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
         (!letter || normalize(p.name).startsWith(letter)) &&
         (!q || normalize(p.name).includes(q) || normalize(p.team).includes(q)),
     );
-    out.sort((a, b) =>
-      sort === 'name' || hideValues
+    out.sort((a, b) => {
+      // "Ruolo": desde el arco — P → D → C → A; adentro por quotazione desc (o nombre con hideValues).
+      if (sort === 'role') {
+        const d = ROLES.indexOf(a.role) - ROLES.indexOf(b.role);
+        if (d !== 0) return d;
+        return hideValues
+          ? a.name.localeCompare(b.name)
+          : b.quotazione - a.quotazione || a.name.localeCompare(b.name);
+      }
+      return sort === 'name' || hideValues
         ? a.name.localeCompare(b.name)
-        : b.quotazione - a.quotazione || a.name.localeCompare(b.name),
-    );
+        : b.quotazione - a.quotazione || a.name.localeCompare(b.name);
+    });
     return out;
   }, [players, query, role, sort, hideValues, watchOnly, watchedIds, letter]);
 
@@ -1132,16 +1140,15 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
               </button>
             ))}
           </div>
-          {!hideValues && (
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as 'quotazione' | 'name')}
-              className="h-9 rounded-lg border chalk-line bg-pitch-900 px-2 text-sm text-chalk"
-            >
-              <option value="quotazione">{t('admin.byQuota')}</option>
-              <option value="name">{t('admin.byName')}</option>
-            </select>
-          )}
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as 'quotazione' | 'name' | 'role')}
+            className="h-9 rounded-lg border chalk-line bg-pitch-900 px-2 text-sm text-chalk"
+          >
+            {!hideValues && <option value="quotazione">{t('admin.byQuota')}</option>}
+            <option value="name">{t('admin.byName')}</option>
+            <option value="role">{t('admin.byRole')}</option>
+          </select>
           <button
             type="button"
             onClick={() => setWatchOnly((v) => !v)}
@@ -1185,8 +1192,18 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
           </p>
 
           <ul className="mt-1 divide-y divide-chalk/10">
-            {shown.map((p) => (
-              <ListoneRow key={p.id} player={p} state={state} onSheet={() => setSheet(p)} />
+            {shown.map((p, i) => (
+              <Fragment key={p.id}>
+                {sort === 'role' && shown[i - 1]?.role !== p.role && (
+                  <li className="flex items-center gap-2 pb-1 pt-3">
+                    <RoleBadge role={p.role} size="sm" />
+                    <span className={`text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[p.role].text}`}>
+                      {t(`role.${p.role}`)}
+                    </span>
+                  </li>
+                )}
+                <ListoneRow player={p} state={state} onSheet={() => setSheet(p)} />
+              </Fragment>
             ))}
             {shown.length === 0 && (
               <li className="py-6 text-center text-sm text-chalk-faint">{t('buzzer.noResults')}</li>
