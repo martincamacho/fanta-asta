@@ -138,6 +138,15 @@ function AdminLive({ state }: { state: RoomState }) {
           <Link to={`/tablero/${state.code}`} target="_blank" className={btnGhost}>
             {t('admin.openBoard')}
           </Link>
+          <Link
+            to={`/sala/${state.code}`}
+            target="_blank"
+            rel="noopener"
+            title={t('admin.myBuzzerTip')}
+            className={btnGhost}
+          >
+            {t('admin.myBuzzer')}
+          </Link>
           <a href={`/api/rooms/${state.code}/export/rose.csv`} download className={btnGhost}>
             {t('admin.exportCsv')}
           </a>

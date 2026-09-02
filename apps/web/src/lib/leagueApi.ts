@@ -1,4 +1,4 @@
-import type { InviteInfo, LeagueDetail, LeagueSummary, RoomConfig } from '@fanta/shared';
+import type { InviteInfo, LeagueDetail, LeagueSummary, Role, RoomConfig } from '@fanta/shared';
 import { serverError } from '../authStore';
 
 async function ok<T>(res: Response): Promise<T> {
@@ -75,6 +75,44 @@ export type TicketResult =
   | { kind: 'forbidden' }
   /** Sala sin liga, sin sesión, o endpoint ausente → flujo anónimo normal. */
   | { kind: 'none' };
+
+/* ————— rosas de un asta (sección "Rose" de la liga) ————— */
+
+export interface RosterEntryDetail {
+  player: { id: number; name: string; team: string; role: Role; quotazione: number };
+  price: number;
+}
+
+export interface RosterParticipant {
+  id: string;
+  name: string;
+  connected: boolean;
+  budgetBonus: number;
+  spent: number;
+  remaining: number;
+  roster: RosterEntryDetail[];
+  slotsFilled: Record<Role, number>;
+}
+
+export interface RoomRosters {
+  leagueName?: string;
+  config: RoomConfig;
+  finishedAt: number | null;
+  participants: RosterParticipant[];
+}
+
+/** Rosas completas de una sala. null si el endpoint falta o falla (404/red): la UI degrada suave. */
+export async function getRoomRosters(code: string): Promise<RoomRosters | null> {
+  try {
+    const res = await fetch(`/api/rooms/${encodeURIComponent(code)}/rosters`, {
+      credentials: 'include',
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as RoomRosters;
+  } catch {
+    return null;
+  }
+}
 
 /** Identidad estable para salas de liga. Lanza solo ante error de red. */
 export async function getRoomTicket(code: string): Promise<TicketResult> {

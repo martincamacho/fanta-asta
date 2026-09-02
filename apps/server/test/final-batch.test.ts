@@ -303,6 +303,44 @@ describe('REST: listone por sala, export xlsx y config con rangos', () => {
     const csv = await server.app.inject({ method: 'GET', url: `/api/rooms/${code}/export/rose.csv` });
     expect(csv.body).toContain('Ana,Jugador1,P,Equipo0,3');
   });
+
+  it('GET /rosters: JSON público con listone efectivo, remaining con bonus y orden de compra', async () => {
+    const room = server.manager.getRoom(code)!;
+    const ana = room.state.participants[0]!;
+    room.adjustBudget(ana.id, 50); // bonus: remaining = 500 + 50 - 3
+
+    const res = await server.app.inject({ method: 'GET', url: `/api/rooms/${code}/rosters` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      leagueId?: string;
+      config: { budget: number };
+      finishedAt: number | null;
+      participants: Array<{
+        id: string;
+        name: string;
+        budgetBonus: number;
+        spent: number;
+        remaining: number;
+        roster: Array<{ player: { id: number; name: string; role: string }; price: number }>;
+        slotsFilled: Record<string, number>;
+      }>;
+    };
+
+    expect(body.leagueId).toBeUndefined(); // sala suelta
+    expect(body.config.budget).toBe(500);
+    expect(body.finishedAt).toBeNull();
+    expect(body.participants).toHaveLength(1);
+    const p = body.participants[0]!;
+    expect(p).toMatchObject({ id: ana.id, name: 'Ana', budgetBonus: 50, spent: 3, remaining: 547 });
+    // listone propio: el jugador con id negativo sale hidratado
+    expect(p.roster).toEqual([
+      { player: { id: -1, name: 'Jugador1', team: 'Equipo0', role: 'P', quotazione: 1 }, price: 3 },
+    ]);
+    expect(p.slotsFilled).toEqual({ P: 1, D: 0, C: 0, A: 0 });
+
+    const missing = await server.app.inject({ method: 'GET', url: '/api/rooms/ZZZZZZ/rosters' });
+    expect(missing.statusCode).toBe(404);
+  });
 });
 
 // ── Persistencia del listone propio ────────────────────────────────────────

@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
-import type { InviteInfo, LeagueDetail, RoomConfig } from '@fanta/shared';
+import { ROLES, type InviteInfo, type LeagueDetail, type RoomConfig } from '@fanta/shared';
 import { useAuth } from '../authStore';
 import { useT } from '../i18n';
-import { createLeagueAuction, getLeague, sendInvites } from '../lib/leagueApi';
+import {
+  createLeagueAuction,
+  getLeague,
+  getRoomRosters,
+  sendInvites,
+  type RoomRosters,
+  type RosterParticipant,
+} from '../lib/leagueApi';
+import { normalize } from '../lib/format';
 import { persist } from '../lib/persist';
 import { AuctionConfigForm, labelCls } from '../components/AuctionConfigForm';
+import { RoleBadge, ROLE_STYLES } from '../components/RoleBadge';
 
 export default function Liga() {
   const { id = '' } = useParams();
@@ -90,6 +99,7 @@ function LeagueBody({ detail, reload }: { detail: LeagueDetail; reload: () => Pr
       <div className="mt-8 grid gap-6 lg:grid-cols-[3fr_2fr]">
         <div className="space-y-6">
           <Auctions detail={detail} isAdmin={isAdmin} />
+          <RostersSection detail={detail} />
           {isAdmin && <LaunchAuction detail={detail} />}
         </div>
         <div className="space-y-6">
@@ -193,6 +203,194 @@ function Auctions({ detail, isAdmin }: { detail: LeagueDetail; isAdmin: boolean 
         </>
       )}
     </section>
+  );
+}
+
+/* ————— rosas del asta (GET /api/rooms/:code/rosters) ————— */
+
+function RostersSection({ detail }: { detail: LeagueDetail }) {
+  const { t, locale } = useT();
+  const auctions = [...detail.auctions].sort((a, b) => b.createdAt - a.createdAt);
+  const [latest, ...rest] = auctions;
+  if (!latest) return null;
+
+  function fecha(ts: number): string {
+    return new Date(ts).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+  }
+
+  return (
+    <section className="rounded-2xl border chalk-line bg-pitch-800/50 p-5">
+      <h2 className="font-display text-2xl font-bold uppercase text-chalk">
+        {t('league.rosters')}
+      </h2>
+      <p className="mt-1 text-xs uppercase tracking-widest text-chalk-dim">
+        {latest.roomCode} · {fecha(latest.createdAt)}
+      </p>
+      <div className="mt-3">
+        <AuctionRosters code={latest.roomCode} />
+      </div>
+      {rest.map((a) => (
+        <HistoryRosters
+          key={a.roomCode}
+          roomCode={a.roomCode}
+          label={`${a.roomCode} · ${fecha(a.createdAt)}`}
+        />
+      ))}
+    </section>
+  );
+}
+
+/** Asta del historial: plegada; las rosas se piden recién al abrirla. */
+function HistoryRosters({ roomCode, label }: { roomCode: string; label: string }) {
+  const [opened, setOpened] = useState(false);
+  return (
+    <details
+      className="mt-3 rounded-xl border chalk-line bg-pitch-900/40 px-4 py-3"
+      onToggle={(e) => {
+        if (e.currentTarget.open) setOpened(true);
+      }}
+    >
+      <summary className="cursor-pointer list-none text-sm font-semibold uppercase tracking-widest text-chalk-dim hover:text-chalk [&::-webkit-details-marker]:hidden">
+        {label} ▾
+      </summary>
+      <div className="mt-3">{opened && <AuctionRosters code={roomCode} />}</div>
+    </details>
+  );
+}
+
+function AuctionRosters({ code }: { code: string }) {
+  const { t, locale } = useT();
+  const user = useAuth((s) => s.user);
+  const [data, setData] = useState<RoomRosters | 'loading' | 'error'>('loading');
+
+  useEffect(() => {
+    let alive = true;
+    setData('loading');
+    void getRoomRosters(code).then((r) => {
+      if (alive) setData(r ?? 'error');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+
+  if (data === 'loading') {
+    return <p className="text-sm text-chalk-faint">{t('league.rostersLoading')}</p>;
+  }
+  if (data === 'error') {
+    return <p className="text-sm text-chalk-faint">{t('league.rostersUnavailable')}</p>;
+  }
+
+  const myName = user ? normalize(user.name) : null;
+  const sorted = [...data.participants].sort(
+    (a, b) => b.remaining - a.remaining || a.name.localeCompare(b.name),
+  );
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-chalk-faint">
+        {data.finishedAt !== null
+          ? new Date(data.finishedAt).toLocaleDateString(locale, {
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : t('league.inProgress')}
+      </p>
+      {sorted.map((p) => (
+        <RosterCard
+          key={p.id}
+          participant={p}
+          config={data.config}
+          mine={myName !== null && normalize(p.name) === myName}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RosterCard({
+  participant: p,
+  config,
+  mine,
+}: {
+  participant: RosterParticipant;
+  config: RoomConfig;
+  mine: boolean;
+}) {
+  const { t } = useT();
+  return (
+    <details
+      open={mine}
+      className={`rounded-xl border bg-pitch-900/60 ${mine ? 'border-2 border-gold/70' : 'chalk-line'}`}
+    >
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 [&::-webkit-details-marker]:hidden">
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${p.connected ? 'bg-role-d' : 'bg-chalk-faint'}`}
+        />
+        <span className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-chalk">
+          {p.name}
+          {mine && (
+            <span className="ml-2 rounded bg-gold/15 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-gold">
+              {t('league.youBadge')}
+            </span>
+          )}
+        </span>
+        <span className="flex shrink-0 gap-1.5 text-[11px]">
+          {ROLES.map((role) => (
+            <span
+              key={role}
+              className={`tabular ${
+                p.slotsFilled[role] >= config.slots[role]
+                  ? ROLE_STYLES[role].text
+                  : 'text-chalk-faint'
+              }`}
+            >
+              {role}
+              {p.slotsFilled[role]}/{config.slots[role]}
+            </span>
+          ))}
+        </span>
+        <span className="tabular shrink-0 text-sm text-chalk-dim">
+          <span className={`font-display text-xl font-bold ${p.remaining < 0 ? 'text-danger' : 'text-gold'}`}>
+            {p.remaining}
+          </span>{' '}
+          {t('league.remainingLabel')} · {p.spent} {t('league.spentLabel')}
+        </span>
+      </summary>
+      <div className="space-y-3 border-t chalk-line px-4 py-3">
+        {p.roster.length === 0 ? (
+          <p className="text-xs text-chalk-faint">{t('admin.emptyRoster')}</p>
+        ) : (
+          ROLES.map((role) => {
+            const entries = p.roster.filter((e) => e.player.role === role);
+            if (entries.length === 0) return null;
+            return (
+              <div key={role}>
+                <p className={`mb-1 text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[role].text}`}>
+                  {t(`role.${role}`)}
+                </p>
+                <ul className="space-y-1">
+                  {entries.map((e) => (
+                    <li key={e.player.id} className="flex items-center justify-between gap-2 text-sm">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <RoleBadge role={role} size="sm" />
+                        <span className="truncate text-chalk">{e.player.name}</span>
+                        <span className="truncate text-xs text-chalk-faint">{e.player.team}</span>
+                      </span>
+                      <span className="tabular font-display text-base font-bold text-gold">
+                        {e.price}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </details>
   );
 }
 

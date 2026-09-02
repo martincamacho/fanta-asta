@@ -8,10 +8,13 @@ import fastifyStatic from '@fastify/static';
 import { Server as SocketIOServer, type Socket } from 'socket.io';
 import {
   BID_REJECT_MESSAGES,
+  budgetRemaining,
+  spent,
   type ClientToServerEvents,
   type JoinAck,
   type JoinPayload,
   type Player,
+  type Role,
   type RoomConfig,
   type ServerToClientEvents,
 } from '@fanta/shared';
@@ -155,6 +158,43 @@ export async function createServer(opts: CreateServerOptions = {}): Promise<Fant
     const profile = Number.isInteger(id) ? profiles.get(id) : undefined;
     if (!profile) return reply.code(404).send({ error: 'No hay ficha para ese jugador' });
     return profile;
+  });
+
+  // Rosas de la sala en JSON (solo lectura, público como el tablero/export):
+  // para la página de la liga, sin abrir socket. Listone EFECTIVO de la sala.
+  app.get('/api/rooms/:code/rosters', async (req, reply) => {
+    const code = (req.params as { code: string }).code.toUpperCase();
+    const room = manager.getRoom(code);
+    if (!room) return reply.code(404).send({ error: 'La sala no existe' });
+    const effective = room.effectivePlayers;
+    const state = room.state;
+    const league = store.leagueForRoom(code);
+    return {
+      ...(league ? { leagueId: league.id, leagueName: league.name } : {}),
+      config: state.config,
+      finishedAt: state.finishedAt,
+      participants: state.participants.map((p) => {
+        const slotsFilled: Record<Role, number> = { P: 0, D: 0, C: 0, A: 0 };
+        const roster = p.roster.map((entry) => {
+          const player = effective.get(entry.playerId);
+          if (player) slotsFilled[player.role] += 1;
+          return {
+            player: player ?? { id: entry.playerId, name: `#${entry.playerId}`, team: '', role: null, quotazione: 0 },
+            price: entry.price,
+          };
+        });
+        return {
+          id: p.id,
+          name: p.name,
+          connected: p.connected,
+          budgetBonus: p.budgetBonus,
+          spent: spent(p),
+          remaining: budgetRemaining(p, state.config), // incluye bonus
+          roster, // en orden de compra
+          slotsFilled,
+        };
+      }),
+    };
   });
 
   // Export de rosas compatible con el import de Leghe Fantacalcio.

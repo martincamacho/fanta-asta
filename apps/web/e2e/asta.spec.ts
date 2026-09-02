@@ -112,6 +112,23 @@ test('subasta completa: llamada, rilanci desde dos celulares, cierre y adjudicac
     admin.locator('li').filter({ hasText: 'slot' }).filter({ hasText: name }).first();
   await expect(card('Bravo').getByText('498')).toBeVisible();
   await expect(card('Alfa').getByText('500')).toBeVisible();
+
+  // La pestaña "La mia rosa" del comprador muestra el jugador comprado con su precio
+  // y el progreso del rol actualizado (Dimarco es difensore: D 1/8).
+  await bravo.getByRole('tab', { name: 'La mia rosa' }).click();
+  const rosa = bravo.getByRole('tabpanel');
+  await expect(rosa.getByText('Crediti rimanenti')).toBeVisible();
+  await expect(rosa.getByText('498', { exact: true })).toBeVisible();
+  await expect(rosa.getByText('D 1/8')).toBeVisible();
+  const fila = rosa.locator('li').filter({ hasText: 'Dimarco' }).first();
+  await expect(fila).toBeVisible();
+  await expect(fila.getByText('2', { exact: true })).toBeVisible();
+
+  // La pestaña "Squadre" de otro celular lista a Bravo con sus créditos restantes.
+  await alfa.getByRole('tab', { name: 'Squadre' }).click();
+  const squadre = alfa.getByRole('tabpanel');
+  await expect(squadre.getByText('Bravo')).toBeVisible();
+  await expect(squadre.getByText('498')).toBeVisible();
 });
 
 test('pausa y reanudación visibles en el buzzer', async ({ browser, request }) => {

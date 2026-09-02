@@ -4,9 +4,12 @@ import {
   ROLES,
   budgetRemaining,
   maxBid,
+  minSlots,
   nextMinBid,
+  rosterTarget,
   slotsLeftForRole,
   validateBid,
+  type Participant,
   type Player,
   type RoomState,
 } from '@fanta/shared';
@@ -313,7 +316,7 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
   const player = state.auction.playerId !== null ? players.get(state.auction.playerId) : undefined;
 
   return (
-    <div className="pitch-bg flex h-dvh flex-col overflow-hidden">
+    <div className="pitch-bg flex min-h-dvh flex-col">
       <TopBar
         code={code}
         state={state}
@@ -333,6 +336,7 @@ function BuzzerLive({ code, leagueName }: { code: string; leagueName?: string })
       ) : (
         <AuctionBody state={state} player={player} meId={me.id} />
       )}
+      <BottomTabs state={state} meId={me.id} />
     </div>
   );
 }
@@ -422,7 +426,6 @@ function IdleBody({ state, meId }: { state: RoomState; meId: string }) {
           )}
         </div>
       )}
-      <MyPanel state={state} meId={meId} open={!myTurn} />
     </main>
   );
 }
@@ -757,7 +760,6 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
             {errorText(t, { code: customCheck.reason })}
           </p>
         )}
-        <MyPanel state={state} meId={meId} />
       </section>
     </>
   );
@@ -882,79 +884,244 @@ function FinishedBody({ state, meId }: { state: RoomState; meId: string }) {
           {me ? t('buzzer.finishedMine', { n: me.roster.length }) : t('buzzer.finishedText')}
         </p>
       </div>
-      <MyPanel state={state} meId={meId} open />
     </main>
   );
 }
 
-/* ————— mi equipo ————— */
+/* ————— pestañas inferiores: mi rosa / squadre ————— */
 
-function MyPanel({ state, meId, open = false }: { state: RoomState; meId: string; open?: boolean }) {
+const TAB_STORAGE_KEY = 'fanta:buzzerTab';
+type TabId = 'rosa' | 'squadre';
+
+/** Dos pestañas con estado vivo bajo cualquier fase; la activa persiste en localStorage. */
+function BottomTabs({ state, meId }: { state: RoomState; meId: string }) {
+  const { t } = useT();
+  const [tab, setTab] = useState<TabId>(() => {
+    try {
+      return localStorage.getItem(TAB_STORAGE_KEY) === 'squadre' ? 'squadre' : 'rosa';
+    } catch {
+      return 'rosa';
+    }
+  });
+
+  function pick(next: TabId) {
+    setTab(next);
+    try {
+      localStorage.setItem(TAB_STORAGE_KEY, next);
+    } catch {
+      /* sin storage */
+    }
+  }
+
+  const tabs: { id: TabId; label: string }[] = [
+    { id: 'rosa', label: t('tabs.myRose') },
+    { id: 'squadre', label: t('tabs.squads') },
+  ];
+
+  return (
+    <section className="border-t chalk-line px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-3">
+      <div role="tablist" className="grid grid-cols-2 gap-1 rounded-xl bg-pitch-800/70 p-1">
+        {tabs.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => pick(id)}
+            className={`rounded-lg py-2 font-display text-lg font-bold uppercase tracking-wider transition ${
+              tab === id ? 'bg-pitch-600 text-chalk' : 'text-chalk-dim hover:text-chalk'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" aria-label={tab === 'rosa' ? t('tabs.myRose') : t('tabs.squads')} className="mt-3">
+        {tab === 'rosa' ? (
+          <MyRoseTab state={state} meId={meId} />
+        ) : (
+          <SquadsTab state={state} meId={meId} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Progreso por rol (P 2/3 · D 5/8 · …) con los colores de rol. */
+function RoleProgress({ participant, state }: { participant: Participant; state: RoomState }) {
   const players = useStore((s) => s.players);
+  const { t } = useT();
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {ROLES.map((role) => {
+        const left = slotsLeftForRole(participant, state.config, role, players);
+        const total = state.config.slots[role];
+        return (
+          <div
+            key={role}
+            className={`rounded-lg border px-2 py-1.5 text-center ${
+              left <= 0 ? 'border-pitch-600 bg-pitch-700/60 opacity-70' : 'chalk-line'
+            }`}
+            title={t(`role.${role}`)}
+          >
+            <span className="tabular font-display text-lg font-bold text-chalk-dim">
+              <span className={ROLE_STYLES[role].text}>{role}</span> {total - left}/{total}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Plantilla agrupada por rol con precios; cupos vacíos como "— libero —".
+ *  En modo rango los placeholders garantizados son los mínimos por rol. */
+function RosterByRole({ participant, state }: { participant: Participant; state: RoomState }) {
+  const players = useStore((s) => s.players);
+  const { t } = useT();
+  return (
+    <div className="space-y-3">
+      {ROLES.map((role) => {
+        const entries = participant.roster.filter((e) => players.get(e.playerId)?.role === role);
+        const placeholders = Math.max(0, minSlots(state.config, role) - entries.length);
+        return (
+          <div key={role}>
+            <p className={`mb-1 text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[role].text}`}>
+              {t(`role.${role}`)}
+            </p>
+            <ul className="space-y-1">
+              {entries.map((entry) => {
+                const p = players.get(entry.playerId);
+                return (
+                  <li key={entry.playerId} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <RoleBadge role={role} size="sm" />
+                      <span className="truncate text-chalk">{p?.name ?? `#${entry.playerId}`}</span>
+                      <span className="truncate text-xs text-chalk-faint">{p?.team}</span>
+                    </span>
+                    <span className="tabular font-display text-base font-bold text-gold">
+                      {entry.price}
+                    </span>
+                  </li>
+                );
+              })}
+              {Array.from({ length: placeholders }, (_, i) => (
+                <li
+                  key={`free-${i}`}
+                  className="rounded border border-dashed border-chalk/15 px-2 py-1 text-xs text-chalk-faint"
+                >
+                  {t('tabs.freeSlot')}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MyRoseTab({ state, meId }: { state: RoomState; meId: string }) {
   const { t } = useT();
   const me = state.participants.find((p) => p.id === meId);
   if (!me) return null;
   const credits = budgetRemaining(me, state.config);
-  const max = maxBid(me, state.config);
+  const max = Math.max(0, maxBid(me, state.config));
+  const slotsLeft = Math.max(0, rosterTarget(state.config) - me.roster.length);
 
   return (
-    <details open={open} className="rounded-xl border chalk-line bg-pitch-800/60">
-      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 [&::-webkit-details-marker]:hidden">
-        <span className="text-xs font-semibold uppercase tracking-widest text-chalk-dim">
-          {t('buzzer.myTeam', { name: me.name })}
-        </span>
-        <span className="tabular text-sm text-chalk-dim">
-          <span className="font-display text-lg font-bold text-gold">{credits}</span> cr ·{' '}
-          {t('buzzer.max')}{' '}
-          <span className="font-display text-lg font-bold text-chalk">{Math.max(0, max)}</span>
-        </span>
-      </summary>
-      <div className="border-t chalk-line px-4 py-3">
-        <div className="mb-3 grid grid-cols-4 gap-2">
-          {ROLES.map((role) => {
-            const left = slotsLeftForRole(me, state.config, role, players);
-            const total = state.config.slots[role];
-            return (
-              <div
-                key={role}
-                className={`rounded-lg border px-2 py-1.5 text-center ${
-                  left <= 0 ? 'border-pitch-600 bg-pitch-700/60 opacity-60' : 'chalk-line'
-                }`}
-                title={t(`role.${role}`)}
-              >
-                <span className={`font-display text-lg font-bold ${ROLE_STYLES[role].text}`}>
-                  {role}
-                </span>
-                <span className="tabular block text-xs text-chalk-dim">
-                  {total - left}/{total}
-                  {left <= 0 ? t('buzzer.full') : ''}
-                </span>
-              </div>
-            );
-          })}
+    <div className="space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-widest text-chalk-dim">
+        {t('buzzer.myTeam', { name: me.name })}
+      </p>
+      <div className="flex items-end justify-between gap-3 rounded-xl border chalk-line bg-pitch-800/60 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
+            {t('tabs.creditsLeft')}
+          </p>
+          <p className={`tabular font-display text-6xl font-bold leading-none ${credits < 0 ? 'text-danger' : 'text-gold'}`}>
+            {credits}
+          </p>
         </div>
-        {me.roster.length === 0 ? (
-          <p className="text-xs text-chalk-faint">{t('buzzer.emptyRoster')}</p>
-        ) : (
-          <ul className="space-y-1">
-            {me.roster.map((entry) => {
-              const p = players.get(entry.playerId);
-              return (
-                <li key={entry.playerId} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="flex min-w-0 items-center gap-2">
-                    {p && <RoleBadge role={p.role} size="sm" />}
-                    <span className="truncate text-chalk">{p?.name ?? `#${entry.playerId}`}</span>
-                    <span className="truncate text-xs text-chalk-faint">{p?.team}</span>
-                  </span>
-                  <span className="tabular font-display text-base font-bold text-gold">
-                    {entry.price}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <div className="text-right">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
+            {t('tabs.maxBid')}
+          </p>
+          <p className="tabular font-display text-4xl font-bold leading-none text-chalk">{max}</p>
+        </div>
       </div>
-    </details>
+      <RoleProgress participant={me} state={state} />
+      <p className={`text-xs font-semibold ${slotsLeft === 0 ? 'text-gold' : 'text-chalk-dim'}`}>
+        {slotsLeft === 0 ? t('tabs.rosterDone') : t('tabs.slotsLeft', { n: slotsLeft })}
+      </p>
+      {me.roster.length === 0 && (
+        <p className="text-xs text-chalk-faint">{t('buzzer.emptyRoster')}</p>
+      )}
+      <RosterByRole participant={me} state={state} />
+    </div>
+  );
+}
+
+/** Los demás equipos, ordenados por créditos restantes (desc), con rosa expandible.
+ *  Los precios pagados son públicos: hideValues oculta solo quotazioni/MV. */
+function SquadsTab({ state, meId }: { state: RoomState; meId: string }) {
+  const players = useStore((s) => s.players);
+  const { t } = useT();
+  const config = state.config;
+  const others = state.participants
+    .filter((p) => p.id !== meId)
+    .sort(
+      (a, b) =>
+        budgetRemaining(b, config) - budgetRemaining(a, config) || a.name.localeCompare(b.name),
+    );
+
+  if (others.length === 0) {
+    return <p className="py-3 text-center text-sm text-chalk-faint">{t('tabs.noOthers')}</p>;
+  }
+
+  return (
+    <ul className="space-y-2">
+      {others.map((p) => (
+        <li key={p.id}>
+          <details className="rounded-xl border chalk-line bg-pitch-800/50">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+              <span
+                className={`h-2 w-2 shrink-0 rounded-full ${p.connected ? 'bg-success' : 'bg-chalk-faint'}`}
+                aria-label={p.connected ? t('conn.connected') : t('conn.offline')}
+              />
+              <span className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-chalk">
+                {p.name}
+              </span>
+              <span className="flex shrink-0 gap-1.5 text-[11px]">
+                {ROLES.map((role) => {
+                  const have = p.roster.filter((e) => players.get(e.playerId)?.role === role).length;
+                  const full = have >= config.slots[role];
+                  return (
+                    <span
+                      key={role}
+                      className={`tabular ${full ? ROLE_STYLES[role].text : 'text-chalk-faint'}`}
+                    >
+                      {role}
+                      {have}/{config.slots[role]}
+                    </span>
+                  );
+                })}
+              </span>
+              <span className={`tabular shrink-0 font-display text-2xl font-bold ${budgetRemaining(p, config) < 0 ? 'text-danger' : 'text-gold'}`}>
+                {budgetRemaining(p, config)}
+                <span className="ml-0.5 text-xs font-semibold text-chalk-dim">cr</span>
+              </span>
+            </summary>
+            <div className="border-t chalk-line px-3 py-3">
+              {p.roster.length === 0 ? (
+                <p className="text-xs text-chalk-faint">{t('buzzer.emptyRoster')}</p>
+              ) : (
+                <RosterByRole participant={p} state={state} />
+              )}
+            </div>
+          </details>
+        </li>
+      ))}
+    </ul>
   );
 }
