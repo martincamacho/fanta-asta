@@ -97,6 +97,14 @@ test('subasta completa: llamada, rilanci desde dos celulares, cierre y adjudicac
   await bravo.getByRole('button', { name: /Rilancia/ }).click();
   await expect(bravo.getByText('Stai vincendo')).toBeVisible();
 
+  // Rilancio rápido: Alfa toca "+5" y la oferta queda en vigente+5 (2 → 7).
+  await alfa.getByRole('button', { name: '+5 · 7' }).click();
+  await expect(alfa.getByText('Stai vincendo')).toBeVisible();
+  // Bravo ve la vigente en 7: su "+5" ahora ofrece 12 y el héroe pide 8.
+  await expect(bravo.getByRole('button', { name: '+5 · 12' })).toBeVisible();
+  await bravo.getByRole('button', { name: /Rilancia/ }).click();
+  await expect(bravo.getByText('Stai vincendo')).toBeVisible();
+
   // El admin ve la oferta vigente de Bravo y cierra ya.
   await expect(admin.getByText('Storico delle offerte')).toBeVisible();
   await admin.getByRole('button', { name: /Chiudi ora/ }).click();
@@ -107,10 +115,10 @@ test('subasta completa: llamada, rilanci desde dos celulares, cierre y adjudicac
   await expect(alfa.getByText(/Bravo/)).toBeVisible();
   await expect(carlos.getByText('Venduto!')).toBeVisible();
 
-  // Créditos actualizados en el panel del admin: Bravo pagó 2 → 498.
+  // Créditos actualizados en el panel del admin: Bravo pagó 8 → 492.
   const card = (name: string) =>
     admin.locator('li').filter({ hasText: 'slot' }).filter({ hasText: name }).first();
-  await expect(card('Bravo').getByText('498')).toBeVisible();
+  await expect(card('Bravo').getByText('492')).toBeVisible();
   await expect(card('Alfa').getByText('500')).toBeVisible();
 
   // La pestaña "La mia rosa" del comprador muestra el jugador comprado con su precio
@@ -118,17 +126,17 @@ test('subasta completa: llamada, rilanci desde dos celulares, cierre y adjudicac
   await bravo.getByRole('tab', { name: 'La mia rosa' }).click();
   const rosa = bravo.getByRole('tabpanel');
   await expect(rosa.getByText('Crediti rimanenti')).toBeVisible();
-  await expect(rosa.getByText('498', { exact: true })).toBeVisible();
+  await expect(rosa.getByText('492', { exact: true })).toBeVisible();
   await expect(rosa.getByText('D 1/8')).toBeVisible();
   const fila = rosa.locator('li').filter({ hasText: 'Dimarco' }).first();
   await expect(fila).toBeVisible();
-  await expect(fila.getByText('2', { exact: true })).toBeVisible();
+  await expect(fila.getByText('8', { exact: true })).toBeVisible();
 
   // La pestaña "Squadre" de otro celular lista a Bravo con sus créditos restantes.
   await alfa.getByRole('tab', { name: 'Squadre' }).click();
   const squadre = alfa.getByRole('tabpanel');
   await expect(squadre.getByText('Bravo')).toBeVisible();
-  await expect(squadre.getByText('498')).toBeVisible();
+  await expect(squadre.getByText('492')).toBeVisible();
 });
 
 test('pausa y reanudación visibles en el buzzer', async ({ browser, request }) => {

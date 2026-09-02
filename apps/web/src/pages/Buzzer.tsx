@@ -551,6 +551,9 @@ function TurnPicker({ state }: { state: RoomState }) {
 
 /* ————— subasta ————— */
 
+/** Incrementos de los rilanci rápidos sobre la oferta vigente. */
+const QUICK_INCREMENTS = [5, 10] as const;
+
 function rejectTitle(t: TFunc, reason: string): string {
   const key = `bidTitle.${reason}` as MessageKey;
   try {
@@ -736,6 +739,35 @@ function AuctionBody({ state, player, meId }: { state: RoomState; player: Player
             </>
           )}
         </button>
+
+        {/* rilanci rápidos: vigente+5 / vigente+10 (solo modo digital; con hideValues también) */}
+        {!premi && (
+          <div className="flex gap-2">
+            {QUICK_INCREMENTS.map((inc) => {
+              const amount = (bid?.amount ?? 0) + inc;
+              const quick = validateBid(state, players, meId, amount);
+              return (
+                <button
+                  key={inc}
+                  type="button"
+                  onClick={() => fire(amount)}
+                  disabled={!quick.ok}
+                  title={quick.ok ? undefined : errorText(t, { code: quick.reason })}
+                  className="flex min-h-14 flex-1 flex-col items-center justify-center rounded-xl border-2 border-gold/70 py-2.5 font-display font-bold uppercase text-gold transition active:scale-[0.97] disabled:border-pitch-700 disabled:text-chalk-faint"
+                >
+                  <span className="tabular text-2xl leading-none">
+                    +{inc} · {amount}
+                  </span>
+                  {!quick.ok && check.ok && (
+                    <span className="mt-1 text-[10px] font-semibold tracking-widest">
+                      {rejectTitle(t, quick.reason)}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* puja libre (solo modo digital) */}
         {premi ? null : customOpen ? (
