@@ -1,12 +1,5 @@
-import {
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react';
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { create } from 'zustand';
 import { useParams } from 'react-router-dom';
 import {
   ROLES,
@@ -34,7 +27,7 @@ import { persist, type StoredTicket } from '../lib/persist';
 import { useProfile } from '../lib/profile';
 import { useSoundPref } from '../lib/sound';
 import { useAuctionSounds } from '../lib/useAuctionSounds';
-import { SLOT_CAP, useWatchlist, type WatchEntry } from '../lib/watchlist';
+import { SLOT_CAP, useWatchlist, type BoardLayout, type WatchEntry } from '../lib/watchlist';
 import { csvCell, downloadTextFile, splitCsvLine } from '../lib/exports';
 import { useWakeLock } from '../lib/useWakeLock';
 import { useRoomGuard } from '../lib/useRoomGuard';
@@ -1373,7 +1366,21 @@ function ListoneRow({
   const status = playerStatus(state, p.id);
   const sold = status.kind === 'sold';
   return (
-    <li className={`flex items-center gap-2 py-2.5 ${sold ? 'opacity-55' : ''}`}>
+    // En desktop la fila se arrastra directo a la pizarra (se sigue solo si hacía falta).
+    <li
+      draggable={!sold}
+      onDragStart={(e) => {
+        if ((e.target as HTMLElement).tagName === 'INPUT') {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.setData('text/plain', String(p.id));
+        e.dataTransfer.effectAllowed = 'copy';
+        useBoardDrag.getState().setPlayer(p);
+      }}
+      onDragEnd={() => useBoardDrag.getState().setPlayer(null)}
+      className={`flex items-center gap-2 py-2.5 ${sold ? 'opacity-55' : 'lg:cursor-grab'}`}
+    >
       <WatchStar player={p} className="flex h-10 w-10 items-center justify-center" />
       <PlayerImg player={p} className="w-11 shrink-0" />
       <span className="min-w-0 flex-1">
@@ -1431,7 +1438,7 @@ function WatchlistTools({ state }: { state: RoomState }) {
   }, [toast]);
 
   function exportCsv() {
-    const lines = ['id,nome,squadra,ruolo,budget,slot,nota'];
+    const lines = ['id,nome,squadra,ruolo,budget,slot,nota,gruppo'];
     for (const e of entries) {
       const p = players.get(e.playerId);
       lines.push(
@@ -1443,6 +1450,7 @@ function WatchlistTools({ state }: { state: RoomState }) {
           e.maxPrice ?? '',
           e.slot ?? '',
           csvCell(e.note ?? ''),
+          csvCell(e.group ?? ''),
         ].join(','),
       );
     }
@@ -1467,10 +1475,11 @@ function WatchlistTools({ state }: { state: RoomState }) {
           const name = (cells[1] ?? '').trim();
           const team = (cells[2] ?? '').trim();
           const budget = Math.floor(Number(cells[4]));
-          // Columnas opcionales de la pizarra: slot (orden 0-based) y nota libre.
+          // Columnas opcionales de la pizarra: slot (orden 0-based en su grupo), nota y gruppo.
           const slotRaw = (cells[5] ?? '').trim();
           const slotNum = Math.floor(Number(slotRaw));
           const note = (cells[6] ?? '').trim();
+          const group = (cells[7] ?? '').trim();
           let player = Number.isFinite(id) ? players.get(id) : undefined;
           if (!player && name) player = byName.get(`${normalize(name)}|${normalize(team)}`);
           if (player) {
@@ -1479,6 +1488,7 @@ function WatchlistTools({ state }: { state: RoomState }) {
               maxPrice: Number.isFinite(budget) && budget > 0 ? budget : null,
               slot: slotRaw !== '' && Number.isFinite(slotNum) && slotNum >= 0 ? slotNum : null,
               note: note !== '' ? note.slice(0, 40) : null,
+              group: group !== '' ? group.slice(0, 40) : null,
             });
           } else {
             ignored++;
@@ -1521,17 +1531,30 @@ function WatchlistTools({ state }: { state: RoomState }) {
   );
 }
 
-/* ————— pizarra de planificación: slots por rol creados por el usuario ————— */
+/* ————— pizarra de planificación: grupos y slots por rol, creados por el usuario ————— */
+
+/** Drag global de un jugador hacia la pizarra: lo setean tanto las cards/pool de la
+ *  pizarra como las filas del listone (desktop). Zustand y no useState porque los
+ *  eventos dragover pueden llegar antes del re-render: los handlers leen getState(). */
+const useBoardDrag = create<{ player: Player | null; setPlayer: (p: Player | null) => void }>()(
+  (set) => ({
+    player: null,
+    setPlayer: (player) => set({ player }),
+  }),
+);
 
 /** Jugador seguido con su entry (solo los presentes en el listone efectivo). */
 type Watched = { entry: WatchEntry; player: Player };
 type BoardCell = Watched | null;
+type BoardGroupCells = { name: string | null; cells: BoardCell[] };
 
-/** Pizarra táctica de la watchlist: casillas apiladas por rol. La CANTIDAD de casillas
- *  la maneja el usuario (+/× por rol; sembrada la primera vez con los cupos de la sala)
- *  y persiste solo en localStorage — al server viaja únicamente el `slot` (orden 0-based)
- *  de cada seguido. Drag & drop nativo en desktop (insertar con corrimiento, no solo swap);
- *  en móvil, picker en casillas vacías y menú su/giù/sposta/togli en las ocupadas.
+/** Pizarra táctica de la watchlist: Rol → grupos nombrados por el usuario → casillas.
+ *  El grupo default (name null, "Generale") existe siempre y absorbe las pizarras de
+ *  antes de los grupos; `entry.slot` ordena DENTRO de su grupo y viaja con la watchlist
+ *  junto a `entry.group`; los grupos vacíos/orden/cantidad de casillas viven en el
+ *  layout de localStorage (ver lib/watchlist.ts). Drag & drop nativo en desktop —
+ *  también DESDE el listone, siguiendo al jugador automáticamente — con inserción y
+ *  reindexado; en móvil, picker en casillas vacías y menú su/giù/sposta/togli.
  *  Con el asta en vivo la pizarra se apaga: "✓ preso a N cr" o tachado con el comprador. */
 function WatchBoard({
   state,
@@ -1545,65 +1568,109 @@ function WatchBoard({
   const players = useStore((s) => s.players);
   const code = useWatchlist((s) => s.code);
   const entries = useWatchlist((s) => s.entries);
-  const slotCounts = useWatchlist((s) => s.slotCounts);
+  const layout = useWatchlist((s) => s.layout);
   const setSlots = useWatchlist((s) => s.setSlots);
   const setNote = useWatchlist((s) => s.setNote);
-  const ensureSlotCounts = useWatchlist((s) => s.ensureSlotCounts);
-  const setSlotCounts = useWatchlist((s) => s.setSlotCounts);
+  const ensureLayout = useWatchlist((s) => s.ensureLayout);
+  const setLayout = useWatchlist((s) => s.setLayout);
   const { t } = useT();
 
-  const [dragging, setDragging] = useState<Player | null>(null);
-  /** Fuente de verdad durante el drag: los eventos dragover pueden llegar antes del
-   *  re-render de React, así que la lógica lee el ref y el estado solo pinta. */
-  const dragRef = useRef<Player | null>(null);
-  /** Casilla con feedback de rechazo suave (`${role}${i}`) al arrastrar/tocar rol equivocado. */
+  const dragging = useBoardDrag((s) => s.player);
+  /** Casilla con feedback de rechazo suave al arrastrar/tocar rol equivocado. */
   const [rejectKey, setRejectKey] = useState<string | null>(null);
-  const [picker, setPicker] = useState<{ role: Role; slot: number } | null>(null);
+  const [picker, setPicker] = useState<{ role: Role; group: string | null; slot: number } | null>(
+    null,
+  );
   const [moving, setMoving] = useState<Player | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
+  /** Rol con el input "nombre del grupo nuevo" abierto. */
+  const [namingRole, setNamingRole] = useState<Role | null>(null);
 
-  // Primera apertura sin datos: sembramos los cupos de la sala como sugerencia.
+  // Primera apertura sin datos: sembramos un grupo default por rol con los cupos de la sala.
   useEffect(() => {
-    if (code && slotCounts === null) ensureSlotCounts(state.config.slots);
-  }, [code, slotCounts, ensureSlotCounts, state.config.slots]);
+    if (code && layout === null) ensureLayout(state.config.slots);
+  }, [code, layout, ensureLayout, state.config.slots]);
 
-  const counts = slotCounts ?? state.config.slots;
+  const lay: BoardLayout = layout ?? {
+    P: { groups: [{ name: null, count: state.config.slots.P, open: true }], open: true },
+    D: { groups: [{ name: null, count: state.config.slots.D, open: true }], open: true },
+    C: { groups: [{ name: null, count: state.config.slots.C, open: true }], open: true },
+    A: { groups: [{ name: null, count: state.config.slots.A, open: true }], open: true },
+  };
 
   const watched: Watched[] = entries
     .map((e) => ({ entry: e, player: players.get(e.playerId) }))
     .filter((x): x is Watched => x.player !== undefined);
 
-  // Celdas por rol: entry.slot es la posición; huecos = casillas vacías. Slots fuera de
-  // rango o duplicados (p.ej. import) caen al pool "da sistemare" sin perderse.
+  // Celdas por rol y grupo: entry.slot es la posición dentro de su grupo. Grupos que
+  // solo existen en entries (p.ej. import de otra pizarra) se agregan derivados; slots
+  // fuera de rango o duplicados caen al pool "da sistemare" sin perderse.
   const board = useMemo(() => {
-    const out = {} as Record<Role, { cells: BoardCell[]; pool: Watched[] }>;
+    const out = {} as Record<Role, { groups: BoardGroupCells[]; pool: Watched[] }>;
     for (const role of ROLES) {
-      const group = watched.filter((x) => x.player.role === role);
-      const maxSlot = group.reduce((m, x) => Math.max(m, x.entry.slot ?? -1), -1);
-      const n = Math.min(SLOT_CAP, Math.max(counts[role] ?? 0, maxSlot + 1));
-      const cells: BoardCell[] = Array.from({ length: n }, () => null);
-      const pool: Watched[] = [];
-      for (const x of group) {
-        const s = x.entry.slot;
-        if (s !== null && s >= 0 && s < n && cells[s] === null) cells[s] = x;
-        else pool.push(x);
+      const inRole = watched.filter((x) => x.player.role === role);
+      const names: Array<string | null> = lay[role].groups.map((g) => g.name);
+      for (const x of inRole) {
+        if (x.entry.group !== null && !names.includes(x.entry.group)) names.push(x.entry.group);
       }
-      out[role] = { cells, pool };
+      const groups: BoardGroupCells[] = names.map((name) => {
+        const inGroup = inRole.filter((x) => x.entry.group === name);
+        const layCount = lay[role].groups.find((g) => g.name === name)?.count ?? 0;
+        const maxSlot = inGroup.reduce((m, x) => Math.max(m, x.entry.slot ?? -1), -1);
+        const n = Math.min(SLOT_CAP, Math.max(layCount, maxSlot + 1));
+        return { name, cells: Array.from({ length: n }, () => null) as BoardCell[] };
+      });
+      const pool: Watched[] = [];
+      for (const x of inRole) {
+        const grp = groups.find((g) => g.name === x.entry.group);
+        const s = x.entry.slot;
+        if (grp && s !== null && s >= 0 && s < grp.cells.length && grp.cells[s] === null) {
+          grp.cells[s] = x;
+        } else {
+          pool.push(x);
+        }
+      }
+      out[role] = { groups, pool };
     }
     return out;
-    // players/entries/counts definen el tablero; watched deriva de ellos.
+    // watched deriva de entries+players; lay de layout+config.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, players, counts]);
+  }, [entries, players, lay]);
 
   function flashReject(key: string) {
     setRejectKey(key);
     window.setTimeout(() => setRejectKey((k) => (k === key ? null : k)), 600);
   }
 
-  /** Inserta al jugador en la casilla `target` de su rol corriendo a los de abajo
-   *  hasta el primer hueco (si la columna está llena, crece un slot hasta el tope). */
-  function placeAt(playerId: number, role: Role, target: number) {
-    const ids = board[role].cells.map((c) => (c && c.player.id !== playerId ? c.player.id : null));
+  /** Materializa en el layout la cantidad de slots de un grupo (creándolo si era derivado). */
+  function setGroupCount(role: Role, name: string | null, count: number) {
+    const groups = lay[role].groups.map((g) => ({ ...g }));
+    const g = groups.find((x) => x.name === name);
+    if (g) g.count = count;
+    else if (name !== null) groups.push({ name, count, open: true });
+    setLayout({ ...lay, [role]: { ...lay[role], groups } });
+  }
+
+  /** Pliega/despliega el bloque entero del rol (persistido en el layout local). */
+  function toggleRole(role: Role) {
+    setLayout({ ...lay, [role]: { ...lay[role], open: !lay[role].open } });
+  }
+
+  /** Pliega/despliega un grupo (creándolo en el layout si era derivado). */
+  function toggleGroup(role: Role, name: string | null, open: boolean) {
+    const groups = lay[role].groups.map((g) => ({ ...g }));
+    const g = groups.find((x) => x.name === name);
+    if (g) g.open = open;
+    else if (name !== null) groups.push({ name, count: 0, open });
+    setLayout({ ...lay, [role]: { ...lay[role], groups } });
+  }
+
+  /** Inserta al jugador en la casilla `target` del grupo, corriendo a los de abajo
+   *  hasta el primer hueco (si el grupo está lleno, crece un slot hasta el tope). */
+  function placeAt(playerId: number, role: Role, groupName: string | null, target: number) {
+    const grp = board[role].groups.find((g) => g.name === groupName);
+    if (!grp) return;
+    const ids = grp.cells.map((c) => (c && c.player.id !== playerId ? c.player.id : null));
     let carry: number | null = playerId;
     for (let i = target; i < ids.length && carry !== null; i++) {
       const tmp = ids[i] ?? null;
@@ -1615,22 +1682,28 @@ function WatchBoard({
       if (ids.length < SLOT_CAP) {
         ids.push(carry);
         grew = true;
-      } else {
-        setSlots([{ playerId: carry, slot: null }]); // sin lugar: el desplazado vuelve al pool
       }
     }
-    const changes: Array<{ playerId: number; slot: number | null }> = [];
+    const changes: Array<{ playerId: number; slot: number | null; group?: string | null }> = [];
     ids.forEach((id, idx) => {
-      if (id !== null) changes.push({ playerId: id, slot: idx });
+      if (id !== null) changes.push({ playerId: id, slot: idx, group: groupName });
     });
+    if (carry !== null && !grew) changes.push({ playerId: carry, slot: null, group: null });
     setSlots(changes);
-    if (grew) setSlotCounts({ ...counts, [role]: ids.length });
+    if (grew) setGroupCount(role, groupName, ids.length);
   }
 
-  /** Su/giù del menú móvil: intercambio con la casilla adyacente (vacía u ocupada). */
-  function swapCells(role: Role, a: number, b: number) {
-    const cells = board[role].cells;
-    if (b < 0 || b >= cells.length) return;
+  /** Drop sobre la pizarra: si viene del listone y no estaba seguido, se sigue solo. */
+  function dropAssign(p: Player, role: Role, groupName: string | null, target: number) {
+    if (p.role !== role) return;
+    if (!entries.some((e) => e.playerId === p.id)) useWatchlist.getState().toggle(p.id);
+    placeAt(p.id, role, groupName, target);
+  }
+
+  /** Su/giù del menú móvil: intercambio con la casilla adyacente del mismo grupo. */
+  function swapCells(role: Role, groupName: string | null, a: number, b: number) {
+    const cells = board[role].groups.find((g) => g.name === groupName)?.cells;
+    if (!cells || b < 0 || b >= cells.length) return;
     const changes: Array<{ playerId: number; slot: number | null }> = [];
     const A = cells[a];
     const B = cells[b];
@@ -1639,22 +1712,70 @@ function WatchBoard({
     if (changes.length > 0) setSlots(changes);
   }
 
-  function addSlot(role: Role) {
-    setSlotCounts({ ...counts, [role]: Math.min(SLOT_CAP, board[role].cells.length + 1) });
+  function addSlot(role: Role, groupName: string | null) {
+    const cells = board[role].groups.find((g) => g.name === groupName)?.cells;
+    if (!cells) return;
+    setGroupCount(role, groupName, Math.min(SLOT_CAP, cells.length + 1));
   }
 
-  /** Elimina la casilla i: su ocupante vuelve al pool y los de abajo suben un lugar. */
-  function removeSlotAt(role: Role, i: number) {
-    const cells = board[role].cells;
-    const changes: Array<{ playerId: number; slot: number | null }> = [];
+  /** Elimina la casilla i del grupo: su ocupante vuelve al pool y los de abajo suben. */
+  function removeSlotAt(role: Role, groupName: string | null, i: number) {
+    const cells = board[role].groups.find((g) => g.name === groupName)?.cells;
+    if (!cells) return;
+    const changes: Array<{ playerId: number; slot: number | null; group?: string | null }> = [];
     const occ = cells[i];
-    if (occ) changes.push({ playerId: occ.player.id, slot: null });
+    if (occ) changes.push({ playerId: occ.player.id, slot: null, group: null });
     cells.forEach((c, idx) => {
       if (c && idx > i) changes.push({ playerId: c.player.id, slot: idx - 1 });
     });
     if (changes.length > 0) setSlots(changes);
-    setSlotCounts({ ...counts, [role]: Math.max(0, cells.length - 1) });
+    setGroupCount(role, groupName, Math.max(0, cells.length - 1));
     setPicker(null);
+  }
+
+  /** Crea un grupo nombrado (con un slot listo); nombre vacío o repetido = cancelar. */
+  function addGroup(role: Role, rawName: string) {
+    setNamingRole(null);
+    const name = rawName.trim().slice(0, 40);
+    if (name === '' || board[role].groups.some((g) => g.name === name)) return;
+    setLayout({
+      ...lay,
+      [role]: {
+        ...lay[role],
+        groups: [...lay[role].groups.map((g) => ({ ...g })), { name, count: 1, open: true }],
+      },
+    });
+  }
+
+  /** Renombra un grupo (layout + entries de ese rol/grupo). false = nombre inválido. */
+  function renameGroup(role: Role, oldName: string, rawName: string): boolean {
+    const name = rawName.trim().slice(0, 40);
+    if (name === oldName) return true;
+    if (name === '' || board[role].groups.some((g) => g.name === name)) return false;
+    setLayout({
+      ...lay,
+      [role]: {
+        ...lay[role],
+        groups: lay[role].groups.map((g) => (g.name === oldName ? { ...g, name } : { ...g })),
+      },
+    });
+    const changes = watched
+      .filter((x) => x.player.role === role && x.entry.group === oldName)
+      .map((x) => ({ playerId: x.player.id, slot: x.entry.slot, group: name }));
+    if (changes.length > 0) setSlots(changes);
+    return true;
+  }
+
+  /** Elimina el grupo: sus jugadores vuelven al pool (siguen seguidos). */
+  function removeGroup(role: Role, name: string) {
+    const changes = watched
+      .filter((x) => x.player.role === role && x.entry.group === name)
+      .map((x) => ({ playerId: x.player.id, slot: null, group: null }));
+    if (changes.length > 0) setSlots(changes);
+    setLayout({
+      ...lay,
+      [role]: { ...lay[role], groups: lay[role].groups.filter((g) => g.name !== name) },
+    });
   }
 
   function dragProps(p: Player, sold: boolean) {
@@ -1667,24 +1788,22 @@ function WatchBoard({
         }
         e.dataTransfer.setData('text/plain', String(p.id));
         e.dataTransfer.effectAllowed = 'move';
-        dragRef.current = p;
-        setDragging(p);
+        useBoardDrag.getState().setPlayer(p);
         setMenuFor(null);
         setPicker(null);
       },
       onDragEnd: () => {
-        dragRef.current = null;
-        setDragging(null);
+        useBoardDrag.getState().setPlayer(null);
         setRejectKey(null);
       },
     };
   }
 
-  /** Props de destino de drop para la casilla i del rol (rechazo suave si el rol no coincide). */
-  function dropProps(role: Role, i: number) {
-    const key = `${role}${i}`;
+  /** Props de destino de drop para una casilla (rechazo suave si el rol no coincide). */
+  function dropProps(role: Role, groupName: string | null, i: number) {
+    const key = `${role}|${groupName ?? ''}|${i}`;
     const over = (e: React.DragEvent) => {
-      const d = dragRef.current;
+      const d = useBoardDrag.getState().player;
       if (!d) return;
       if (d.role === role) e.preventDefault();
       else setRejectKey(key);
@@ -1695,10 +1814,9 @@ function WatchBoard({
       onDragLeave: () => setRejectKey((k) => (k === key ? null : k)),
       onDrop: (e: React.DragEvent) => {
         e.preventDefault();
-        const d = dragRef.current;
-        if (d && d.role === role) placeAt(d.id, role, i);
-        dragRef.current = null;
-        setDragging(null);
+        const d = useBoardDrag.getState().player;
+        if (d) dropAssign(d, role, groupName, i);
+        useBoardDrag.getState().setPlayer(null);
         setRejectKey(null);
       },
     };
@@ -1706,6 +1824,8 @@ function WatchBoard({
 
   const menuBtn =
     'rounded-md border chalk-line px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-chalk-dim transition hover:text-chalk disabled:opacity-40';
+  const addBtn =
+    'rounded-lg border border-dashed chalk-line px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-chalk-dim transition hover:text-chalk disabled:opacity-40';
   const poolCount = ROLES.reduce((n, role) => n + board[role].pool.length, 0);
   const rangeMode = state.config.slotsMin !== undefined || state.config.rosterSize != null;
 
@@ -1727,14 +1847,25 @@ function WatchBoard({
       )}
 
       {ROLES.map((role) => {
-        const { cells, pool } = board[role];
-        const subtotal = watched
+        const { groups } = board[role];
+        const roleSubtotal = watched
           .filter((x) => x.player.role === role)
           .reduce((s, x) => s + (x.entry.maxPrice ?? 0), 0);
         const min = rangeMode ? minSlots(state.config, role) : 0;
+        const hasNamed = groups.some((g) => g.name !== null);
+        const roleOpen = lay[role].open;
         return (
           <div key={role}>
-            <p className="mb-1 flex items-baseline gap-1.5">
+            {/* encabezado plegable: chevron + rol + subtotal siempre a la vista */}
+            <button
+              type="button"
+              onClick={() => toggleRole(role)}
+              aria-expanded={roleOpen}
+              className="mb-1 flex w-full items-center gap-1.5 text-left"
+            >
+              <span className="w-3 shrink-0 text-[10px] leading-none text-chalk-faint">
+                {roleOpen ? '▾' : '▸'}
+              </span>
               <span
                 className={`text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[role].text}`}
               >
@@ -1745,262 +1876,388 @@ function WatchBoard({
                   {t('watch.minTag', { n: min })}
                 </span>
               )}
-            </p>
-            <ul className="space-y-1.5">
-              {cells.map((cell, i) => {
-                const key = `${role}${i}`;
-                const reject = rejectKey === key;
-                const target =
-                  (dragging !== null && dragging.role === role && dragging.id !== cell?.player.id) ||
-                  (moving !== null && moving.role === role && moving.id !== cell?.player.id);
-                const removeBtn = (
-                  <button
-                    type="button"
-                    onClick={() => removeSlotAt(role, i)}
-                    aria-label={t('watch.removeSlotAria', { role, n: i + 1 })}
-                    className="w-6 shrink-0 self-stretch rounded-lg text-sm leading-none text-chalk-faint/70 transition hover:bg-danger/15 hover:text-danger"
-                  >
-                    ×
-                  </button>
-                );
+              <span className="tabular ml-auto shrink-0 text-[11px] text-chalk-faint">
+                {t('watch.subtotal', { n: roleSubtotal })}
+              </span>
+            </button>
 
-                if (!cell) {
-                  return (
-                    <li key={`empty-${i}`}>
-                      <div className="flex items-stretch gap-1">
-                        <button
-                          type="button"
-                          aria-label={t('watch.slotAria', { role, n: i + 1 })}
-                          onClick={() => {
-                            if (moving) {
-                              if (moving.role === role) {
-                                placeAt(moving.id, role, i);
-                                setMoving(null);
-                              } else {
-                                flashReject(key);
-                              }
-                              return;
-                            }
-                            setMenuFor(null);
-                            setPicker(
-                              picker && picker.role === role && picker.slot === i
-                                ? null
-                                : { role, slot: i },
-                            );
-                          }}
-                          {...dropProps(role, i)}
-                          className={`min-h-11 flex-1 rounded-lg border border-dashed px-2 text-center text-[11px] transition ${
-                            reject
-                              ? 'border-danger/70 text-danger'
-                              : target
-                                ? 'border-gold/70 text-gold'
-                                : i < min
-                                  ? 'border-chalk/30 text-chalk-faint'
-                                  : 'border-chalk/15 text-chalk-faint/80'
-                          }`}
-                        >
-                          {t('watch.dragHere')}
-                        </button>
-                        {removeBtn}
-                      </div>
-                      {picker && picker.role === role && picker.slot === i && (
-                        <div className="animate-rise mt-1 rounded-lg border chalk-line bg-pitch-900 p-2">
-                          <div className="mb-1 flex items-center justify-between gap-2">
-                            <p className="text-[10px] font-semibold uppercase tracking-widest text-chalk-dim">
-                              {t('watch.pickerTitle')}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => setPicker(null)}
-                              aria-label={t('buzzer.dismiss')}
-                              className="px-1 text-chalk-faint"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                          {pool.length === 0 ? (
-                            <p className="py-1 text-[11px] text-chalk-faint">
-                              {t('watch.pickerEmpty')}
-                            </p>
-                          ) : (
-                            <ul className="max-h-48 space-y-0.5 overflow-y-auto">
-                              {pool.map((x) => (
-                                <li key={x.player.id}>
-                                  <button
-                                    type="button"
-                                    aria-label={t('watch.pickAria', { name: x.player.name })}
-                                    onClick={() => {
-                                      placeAt(x.player.id, role, i);
-                                      setPicker(null);
-                                    }}
-                                    className="flex w-full items-center gap-2 rounded px-1 py-1 text-left transition hover:bg-pitch-700"
-                                  >
-                                    <PlayerImg player={x.player} className="w-7 shrink-0" />
-                                    <span className="min-w-0 flex-1 truncate text-sm text-chalk">
-                                      {x.player.name}
-                                    </span>
-                                    {x.entry.maxPrice !== null && (
-                                      <span className="tabular shrink-0 text-xs font-bold text-gold">
-                                        {x.entry.maxPrice}
-                                      </span>
-                                    )}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </li>
-                  );
-                }
-
-                const p = cell.player;
-                const status = playerStatus(state, p.id);
-                const soldMine =
-                  status.kind === 'sold' && (me?.roster.some((e) => e.playerId === p.id) ?? false);
-                const soldOther = status.kind === 'sold' && !soldMine;
-                return (
-                  <li key={p.id}>
-                    <div className="flex items-stretch gap-1">
-                      <div
-                        {...dragProps(p, status.kind === 'sold')}
-                        {...dropProps(role, i)}
-                        className={`min-w-0 flex-1 rounded-lg border px-2 py-1.5 transition ${
-                          soldMine
-                            ? 'border-success/60 bg-success/10'
-                            : soldOther
-                              ? 'chalk-line bg-pitch-900/60 opacity-55'
-                              : reject
-                                ? 'border-danger/70 bg-pitch-800/70'
-                                : target
-                                  ? 'border-gold/60 bg-pitch-800/70'
-                                  : 'chalk-line bg-pitch-800/70 cursor-grab'
-                        }`}
+            <div
+              className={`grid transition-[grid-template-rows] duration-200 ${
+                roleOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+              }`}
+            >
+              <div className="overflow-hidden">
+            {groups.map((g) => {
+              const groupSubtotal = g.cells.reduce(
+                (s, c) => s + (c?.entry.maxPrice ?? 0),
+                0,
+              );
+              const pool = board[role].pool;
+              const gOpen = lay[role].groups.find((x) => x.name === g.name)?.open ?? true;
+              /* sin grupos con nombre no hay encabezado de grupo: manda el plegado del rol */
+              const gShown = !hasNamed || gOpen;
+              return (
+                <div key={g.name ?? '\u0000default'} className={hasNamed ? 'mb-3' : ''}>
+                  {hasNamed && (
+                    <div className="mb-1 mt-1.5 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(role, g.name, !gOpen)}
+                        aria-expanded={gOpen}
+                        aria-label={t('watch.toggleAria', {
+                          name: g.name ?? t('watch.groupDefault'),
+                        })}
+                        className="w-3 shrink-0 text-[10px] leading-none text-chalk-faint"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="tabular w-4 shrink-0 text-right text-[10px] text-chalk-faint">
-                            {i + 1}
-                          </span>
-                          <PlayerImg player={p} className="w-8 shrink-0" />
+                        {gOpen ? '▾' : '▸'}
+                      </button>
+                      {g.name === null ? (
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-widest text-chalk-dim">
+                          {t('watch.groupDefault')}
+                        </span>
+                      ) : (
+                        <>
+                          <input
+                            key={g.name}
+                            defaultValue={g.name}
+                            maxLength={40}
+                            aria-label={t('watch.groupNameAria')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            }}
+                            onBlur={(e) => {
+                              if (!renameGroup(role, g.name as string, e.target.value)) {
+                                e.target.value = g.name as string;
+                              }
+                            }}
+                            className="w-0 min-w-0 flex-1 border-b border-transparent bg-transparent text-xs font-bold uppercase tracking-wider text-chalk focus:border-chalk/25 focus:outline-none"
+                          />
                           <button
                             type="button"
-                            onClick={() => {
-                              if (moving) {
-                                if (moving.id === p.id) setMoving(null);
-                                else if (moving.role === role) {
-                                  placeAt(moving.id, role, i);
-                                  setMoving(null);
-                                } else flashReject(key);
-                                return;
-                              }
-                              setPicker(null);
-                              setMenuFor(menuFor === p.id ? null : p.id);
-                            }}
-                            className="min-w-0 flex-1 text-left"
+                            onClick={() => removeGroup(role, g.name as string)}
+                            aria-label={t('watch.removeGroupAria', { name: g.name })}
+                            className="shrink-0 rounded px-1 text-sm leading-none text-chalk-faint/70 transition hover:bg-danger/15 hover:text-danger"
                           >
-                            <span
-                              className={`block truncate text-sm font-semibold ${
-                                soldOther ? 'text-chalk-dim line-through' : 'text-chalk'
+                            ×
+                          </button>
+                        </>
+                      )}
+                      <span className="tabular shrink-0 text-[10px] text-chalk-faint">
+                        {t('watch.subtotal', { n: groupSubtotal })}
+                      </span>
+                    </div>
+                  )}
+
+                  <div
+                    className={`grid transition-[grid-template-rows] duration-200 ${
+                      gShown ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                  <ul className="space-y-1.5">
+                    {g.cells.map((cell, i) => {
+                      const key = `${role}|${g.name ?? ''}|${i}`;
+                      const reject = rejectKey === key;
+                      const target =
+                        (dragging !== null &&
+                          dragging.role === role &&
+                          dragging.id !== cell?.player.id) ||
+                        (moving !== null && moving.role === role && moving.id !== cell?.player.id);
+                      const slotLabel =
+                        g.name === null
+                          ? t('watch.slotAria', { role, n: i + 1 })
+                          : t('watch.slotInGroupAria', { role, n: i + 1, group: g.name });
+                      const removeBtn = (
+                        <button
+                          type="button"
+                          onClick={() => removeSlotAt(role, g.name, i)}
+                          aria-label={t('watch.removeSlotAria', { role, n: i + 1 })}
+                          className="w-6 shrink-0 self-stretch rounded-lg text-sm leading-none text-chalk-faint/70 transition hover:bg-danger/15 hover:text-danger"
+                        >
+                          ×
+                        </button>
+                      );
+
+                      if (!cell) {
+                        return (
+                          <li key={`empty-${i}`}>
+                            <div className="flex items-stretch gap-1">
+                              <button
+                                type="button"
+                                aria-label={slotLabel}
+                                onClick={() => {
+                                  if (moving) {
+                                    if (moving.role === role) {
+                                      placeAt(moving.id, role, g.name, i);
+                                      setMoving(null);
+                                    } else {
+                                      flashReject(key);
+                                    }
+                                    return;
+                                  }
+                                  setMenuFor(null);
+                                  setPicker(
+                                    picker &&
+                                      picker.role === role &&
+                                      picker.group === g.name &&
+                                      picker.slot === i
+                                      ? null
+                                      : { role, group: g.name, slot: i },
+                                  );
+                                }}
+                                {...dropProps(role, g.name, i)}
+                                className={`min-h-11 flex-1 rounded-lg border border-dashed px-2 text-center text-[11px] transition ${
+                                  reject
+                                    ? 'border-danger/70 text-danger'
+                                    : target
+                                      ? 'border-gold/70 text-gold'
+                                      : i < min && g.name === null
+                                        ? 'border-chalk/30 text-chalk-faint'
+                                        : 'border-chalk/15 text-chalk-faint/80'
+                                }`}
+                              >
+                                {t('watch.dragHere')}
+                              </button>
+                              {removeBtn}
+                            </div>
+                            {picker &&
+                              picker.role === role &&
+                              picker.group === g.name &&
+                              picker.slot === i && (
+                                <div className="animate-rise mt-1 rounded-lg border chalk-line bg-pitch-900 p-2">
+                                  <div className="mb-1 flex items-center justify-between gap-2">
+                                    <p className="text-[10px] font-semibold uppercase tracking-widest text-chalk-dim">
+                                      {t('watch.pickerTitle')}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPicker(null)}
+                                      aria-label={t('buzzer.dismiss')}
+                                      className="px-1 text-chalk-faint"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                  {pool.length === 0 ? (
+                                    <p className="py-1 text-[11px] text-chalk-faint">
+                                      {t('watch.pickerEmpty')}
+                                    </p>
+                                  ) : (
+                                    <ul className="max-h-48 space-y-0.5 overflow-y-auto">
+                                      {pool.map((x) => (
+                                        <li key={x.player.id}>
+                                          <button
+                                            type="button"
+                                            aria-label={t('watch.pickAria', {
+                                              name: x.player.name,
+                                            })}
+                                            onClick={() => {
+                                              placeAt(x.player.id, role, g.name, i);
+                                              setPicker(null);
+                                            }}
+                                            className="flex w-full items-center gap-2 rounded px-1 py-1 text-left transition hover:bg-pitch-700"
+                                          >
+                                            <PlayerImg player={x.player} className="w-7 shrink-0" />
+                                            <span className="min-w-0 flex-1 truncate text-sm text-chalk">
+                                              {x.player.name}
+                                            </span>
+                                            {x.entry.maxPrice !== null && (
+                                              <span className="tabular shrink-0 text-xs font-bold text-gold">
+                                                {x.entry.maxPrice}
+                                              </span>
+                                            )}
+                                          </button>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+                          </li>
+                        );
+                      }
+
+                      const p = cell.player;
+                      const status = playerStatus(state, p.id);
+                      const soldMine =
+                        status.kind === 'sold' &&
+                        (me?.roster.some((e) => e.playerId === p.id) ?? false);
+                      const soldOther = status.kind === 'sold' && !soldMine;
+                      return (
+                        <li key={p.id}>
+                          <div className="flex items-stretch gap-1">
+                            <div
+                              {...dragProps(p, status.kind === 'sold')}
+                              {...dropProps(role, g.name, i)}
+                              className={`min-w-0 flex-1 rounded-lg border px-2 py-1.5 transition ${
+                                soldMine
+                                  ? 'border-success/60 bg-success/10'
+                                  : soldOther
+                                    ? 'chalk-line bg-pitch-900/60 opacity-55'
+                                    : reject
+                                      ? 'border-danger/70 bg-pitch-800/70'
+                                      : target
+                                        ? 'border-gold/60 bg-pitch-800/70'
+                                        : 'chalk-line bg-pitch-800/70 cursor-grab'
                               }`}
                             >
-                              {p.name}
-                            </span>
-                            <span className="block truncate text-[10px]">
-                              {soldMine ? (
-                                <span className="font-bold text-success">
-                                  {t('watch.taken', { n: status.kind === 'sold' ? status.price : 0 })}
+                              <div className="flex items-center gap-2">
+                                <span className="tabular w-4 shrink-0 text-right text-[10px] text-chalk-faint">
+                                  {i + 1}
                                 </span>
-                              ) : soldOther && status.kind === 'sold' ? (
-                                <span className="text-chalk-faint">
-                                  {t('listone.sold', { name: status.name, n: status.price })}
-                                </span>
-                              ) : (
-                                <span className="text-chalk-faint">{p.team}</span>
+                                <PlayerImg player={p} className="w-8 shrink-0" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (moving) {
+                                      if (moving.id === p.id) setMoving(null);
+                                      else if (moving.role === role) {
+                                        placeAt(moving.id, role, g.name, i);
+                                        setMoving(null);
+                                      } else flashReject(key);
+                                      return;
+                                    }
+                                    setPicker(null);
+                                    setMenuFor(menuFor === p.id ? null : p.id);
+                                  }}
+                                  className="min-w-0 flex-1 text-left"
+                                >
+                                  <span
+                                    className={`block truncate text-sm font-semibold ${
+                                      soldOther ? 'text-chalk-dim line-through' : 'text-chalk'
+                                    }`}
+                                  >
+                                    {p.name}
+                                  </span>
+                                  <span className="block truncate text-[10px]">
+                                    {soldMine ? (
+                                      <span className="font-bold text-success">
+                                        {t('watch.taken', {
+                                          n: status.kind === 'sold' ? status.price : 0,
+                                        })}
+                                      </span>
+                                    ) : soldOther && status.kind === 'sold' ? (
+                                      <span className="text-chalk-faint">
+                                        {t('listone.sold', { name: status.name, n: status.price })}
+                                      </span>
+                                    ) : (
+                                      <span className="text-chalk-faint">{p.team}</span>
+                                    )}
+                                  </span>
+                                </button>
+                                {status.kind !== 'sold' && <WatchMaxInput player={p} />}
+                              </div>
+                              {status.kind !== 'sold' && (
+                                <input
+                                  value={cell.entry.note ?? ''}
+                                  onChange={(e) => setNote(p.id, e.target.value)}
+                                  maxLength={40}
+                                  placeholder={t('watch.notePh')}
+                                  aria-label={t('watch.noteAria', { name: p.name })}
+                                  className="mt-1 w-full border-b border-transparent bg-transparent text-[11px] italic text-gold placeholder:not-italic placeholder:text-chalk-faint/80 focus:border-chalk/25 focus:outline-none"
+                                />
                               )}
-                            </span>
-                          </button>
-                          {status.kind !== 'sold' && <WatchMaxInput player={p} />}
-                        </div>
-                        {status.kind !== 'sold' && (
-                          <input
-                            value={cell.entry.note ?? ''}
-                            onChange={(e) => setNote(p.id, e.target.value)}
-                            maxLength={40}
-                            placeholder={t('watch.notePh')}
-                            aria-label={t('watch.noteAria', { name: p.name })}
-                            className="mt-1 w-full border-b border-transparent bg-transparent text-[11px] italic text-gold placeholder:not-italic placeholder:text-chalk-faint/80 focus:border-chalk/25 focus:outline-none"
-                          />
-                        )}
-                        {menuFor === p.id && !moving && (
-                          <div className="animate-rise mt-1.5 flex flex-wrap gap-1.5 border-t chalk-line pt-1.5">
-                            <button
-                              type="button"
-                              onClick={() => swapCells(role, i, i - 1)}
-                              disabled={i === 0}
-                              className={menuBtn}
-                            >
-                              ↑ {t('watch.moveUp')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => swapCells(role, i, i + 1)}
-                              disabled={i === cells.length - 1}
-                              className={menuBtn}
-                            >
-                              ↓ {t('watch.moveDown')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMoving(p);
-                                setMenuFor(null);
-                              }}
-                              className={menuBtn}
-                            >
-                              {t('watch.move')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSlots([{ playerId: p.id, slot: null }]);
-                                setMenuFor(null);
-                              }}
-                              className={menuBtn}
-                            >
-                              {t('watch.unslot')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onSheet(p);
-                                setMenuFor(null);
-                              }}
-                              className={menuBtn}
-                            >
-                              {t('admin.ficha')}
-                            </button>
+                              {menuFor === p.id && !moving && (
+                                <div className="animate-rise mt-1.5 flex flex-wrap gap-1.5 border-t chalk-line pt-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => swapCells(role, g.name, i, i - 1)}
+                                    disabled={i === 0}
+                                    className={menuBtn}
+                                  >
+                                    ↑ {t('watch.moveUp')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => swapCells(role, g.name, i, i + 1)}
+                                    disabled={i === g.cells.length - 1}
+                                    className={menuBtn}
+                                  >
+                                    ↓ {t('watch.moveDown')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setMoving(p);
+                                      setMenuFor(null);
+                                    }}
+                                    className={menuBtn}
+                                  >
+                                    {t('watch.move')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSlots([{ playerId: p.id, slot: null, group: null }]);
+                                      setMenuFor(null);
+                                    }}
+                                    className={menuBtn}
+                                  >
+                                    {t('watch.unslot')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onSheet(p);
+                                      setMenuFor(null);
+                                    }}
+                                    className={menuBtn}
+                                  >
+                                    {t('admin.ficha')}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            {removeBtn}
                           </div>
-                        )}
-                      </div>
-                      {removeBtn}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => addSlot(role, g.name)}
+                      disabled={g.cells.length >= SLOT_CAP}
+                      className={addBtn}
+                    >
+                      {t('watch.addSlot')}
+                    </button>
+                  </div>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-1.5 flex items-center justify-between gap-2">
+                  </div>
+                </div>
+              );
+            })}
+
+            {namingRole === role && (
+              <input
+                autoFocus
+                maxLength={40}
+                aria-label={t('watch.groupNameAria')}
+                placeholder={t('watch.groupNamePh')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  if (e.key === 'Escape') {
+                    (e.target as HTMLInputElement).value = '';
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                onBlur={(e) => addGroup(role, e.target.value)}
+                className="mt-2 w-full rounded-lg border chalk-line bg-pitch-900 px-2 py-1.5 text-xs text-chalk placeholder:text-chalk-faint"
+              />
+            )}
+            <div className="mt-2">
               <button
                 type="button"
-                onClick={() => addSlot(role)}
-                disabled={cells.length >= SLOT_CAP}
-                className="rounded-lg border border-dashed chalk-line px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-chalk-dim transition hover:text-chalk disabled:opacity-40"
+                onClick={() => setNamingRole(role)}
+                aria-label={t('watch.addGroupAria', { role })}
+                className={addBtn}
               >
-                {t('watch.addSlot')}
+                {t('watch.addGroup')}
               </button>
-              <span className="tabular text-[11px] text-chalk-faint">
-                {t('watch.subtotal', { n: subtotal })}
-              </span>
+            </div>
+              </div>
             </div>
           </div>
         );
@@ -2009,16 +2266,18 @@ function WatchBoard({
       {/* pool "da sistemare": seguidos sin casilla, agrupados por rol; acepta drops para quitar slot */}
       <div
         onDragEnter={(e) => {
-          if (dragRef.current) e.preventDefault();
+          if (useBoardDrag.getState().player) e.preventDefault();
         }}
         onDragOver={(e) => {
-          if (dragRef.current) e.preventDefault();
+          if (useBoardDrag.getState().player) e.preventDefault();
         }}
         onDrop={(e) => {
           e.preventDefault();
-          if (dragRef.current) setSlots([{ playerId: dragRef.current.id, slot: null }]);
-          dragRef.current = null;
-          setDragging(null);
+          const d = useBoardDrag.getState().player;
+          if (d && entries.some((x) => x.playerId === d.id)) {
+            setSlots([{ playerId: d.id, slot: null, group: null }]);
+          }
+          useBoardDrag.getState().setPlayer(null);
           setRejectKey(null);
         }}
         className={`rounded-xl border border-dashed p-2.5 transition ${

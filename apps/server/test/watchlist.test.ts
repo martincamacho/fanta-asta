@@ -101,6 +101,22 @@ describe('watchlist privada pre-asta', () => {
     expect((await put([{ playerId: 1, maxPrice: null, note: 42 }])).statusCode).toBe(400);
     expect((await put([{ playerId: 49, maxPrice: null, slot: 49 }])).statusCode).toBe(200); // borde válido
 
+    // group: mismas reglas que note (trim, vacía → null, ≤40)
+    const grouped = await put([
+      { playerId: 5841, maxPrice: null, group: '  fascia alta  ' },
+      { playerId: 2170, maxPrice: null, group: '' },
+    ]);
+    expect(grouped.statusCode).toBe(200);
+    expect(grouped.json()).toEqual({
+      entries: [
+        { playerId: 5841, maxPrice: null, group: 'fascia alta' },
+        { playerId: 2170, maxPrice: null, group: null },
+      ],
+    });
+    expect((await get()).json()).toEqual(grouped.json());
+    expect((await put([{ playerId: 1, maxPrice: null, group: 'x'.repeat(41) }])).statusCode).toBe(400);
+    expect((await put([{ playerId: 1, maxPrice: null, group: 7 }])).statusCode).toBe(400);
+
     // retrocompat: una lista guardada ANTES de la pizarra (sin slot/note) sigue válida
     const me = await server.app.inject({ method: 'GET', url: '/api/auth/me', cookies: ana });
     const userId = (me.json() as { user: { id: string } }).user.id;

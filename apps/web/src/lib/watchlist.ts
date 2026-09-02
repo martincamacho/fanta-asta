@@ -10,10 +10,12 @@ export interface WatchEntry {
   playerId: number;
   /** Budget estimado ("hasta cuánto llegaría") — opcional. */
   maxPrice: number | null;
-  /** Slot de la pizarra (índice 0-based dentro de los cupos del rol); null = pool "da sistemare". */
+  /** Slot de la pizarra: índice 0-based DENTRO del grupo; null = pool "da sistemare". */
   slot: number | null;
   /** Etiqueta libre del usuario ("titolare", "scommessa"…) — máx 40 chars. */
   note: string | null;
+  /** Agrupación del usuario dentro del rol ("Titolari", "Low cost"…); null = grupo default. */
+  group: string | null;
 }
 
 const NOTE_MAX = 40;
@@ -28,14 +30,33 @@ function lsKey(code: string): string {
   return `fanta:${code.toUpperCase()}:watchlist`;
 }
 
-/* ————— slots de la pizarra por rol —————
- * La CANTIDAD de slots por rol la decide el usuario (los vacíos son solo visuales):
- * no hay campo en el contrato del server para eso, así que vive en localStorage por
- * sala. Lo que viaja al server es el `slot` (orden) de cada jugador seguido. */
+/* ————— layout de la pizarra por rol: grupos del usuario + cantidad de slots —————
+ * Estructura visible: Rol → grupos nombrados por el usuario → slots. Al server solo
+ * viajan `slot` (orden dentro del grupo) y `group` de cada seguido; los GRUPOS VACÍOS,
+ * su ORDEN y la CANTIDAD de slots de cada uno no tienen campo en el contrato, así que
+ * viven client-side en localStorage por sala (misma clave que los slot counts de antes:
+ * `fanta:{CODE}:watchslots`; el formato viejo Record<Role, number> se migra solo, como
+ * único grupo default). El grupo default (name: null, "Generale") existe siempre y va
+ * primero: las pizarras armadas antes de los grupos caen ahí sin migración de datos. */
 
-export type SlotCounts = Record<Role, number>;
+export interface BoardGroup {
+  /** null = grupo default ("Generale"); si no, nombre libre del usuario (≤40). */
+  name: string | null;
+  /** Cantidad de slots visibles del grupo (los vacíos son solo visuales). */
+  count: number;
+  /** Grupo desplegado (default true). */
+  open?: boolean;
+}
 
-/** Tope de slots por rol (el server valida lo mismo para `slot`). */
+export interface RoleLayout {
+  groups: BoardGroup[];
+  /** Bloque del rol desplegado (default true). */
+  open: boolean;
+}
+
+export type BoardLayout = Record<Role, RoleLayout>;
+
+/** Tope de slots por grupo (el server valida lo mismo para `slot`). */
 export const SLOT_CAP = 50;
 
 function slotsKey(code: string): string {
@@ -48,26 +69,69 @@ function clampCount(n: unknown): number | null {
     : null;
 }
 
-function loadSlotCounts(code: string): SlotCounts | null {
+/** Normaliza los grupos de un rol: default primero (único), nombres limpios sin duplicar. */
+function normalizeGroups(raw: unknown): BoardGroup[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: BoardGroup[] = [{ name: null, count: 0, open: true }];
+  const seen = new Set<string>();
+  for (const g of raw as Array<Partial<BoardGroup>>) {
+    if (!g || typeof g !== 'object') return null;
+    const count = clampCount(g.count) ?? 0;
+    const open = g.open !== false;
+    if (g.name === null || g.name === undefined) {
+      out[0] = { name: null, count, open };
+    } else if (typeof g.name === 'string') {
+      const name = g.name.trim().slice(0, NOTE_MAX);
+      if (name !== '' && !seen.has(name)) {
+        seen.add(name);
+        out.push({ name, count, open });
+      }
+    } else {
+      return null;
+    }
+  }
+  return out;
+}
+
+/** Normaliza el layout de un rol; acepta los formatos viejos: número pelado
+ *  (= count del default) y array de grupos sin flag `open`. Default: todo abierto. */
+function normalizeRole(raw: unknown): RoleLayout | null {
+  if (typeof raw === 'number') {
+    const n = clampCount(raw);
+    return n === null ? null : { groups: [{ name: null, count: n, open: true }], open: true };
+  }
+  if (Array.isArray(raw)) {
+    const groups = normalizeGroups(raw);
+    return groups === null ? null : { groups, open: true };
+  }
+  if (raw && typeof raw === 'object' && 'groups' in raw) {
+    const r = raw as Partial<RoleLayout>;
+    const groups = normalizeGroups(r.groups);
+    return groups === null ? null : { groups, open: r.open !== false };
+  }
+  return null;
+}
+
+function loadLayout(code: string): BoardLayout | null {
   try {
     const raw = localStorage.getItem(slotsKey(code));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<Record<Role, unknown>>;
-    const out: Partial<SlotCounts> = {};
+    const out: Partial<BoardLayout> = {};
     for (const role of ['P', 'D', 'C', 'A'] as const) {
-      const n = clampCount(parsed?.[role]);
-      if (n === null) return null;
-      out[role] = n;
+      const roleLayout = normalizeRole(parsed?.[role]);
+      if (roleLayout === null) return null;
+      out[role] = roleLayout;
     }
-    return out as SlotCounts;
+    return out as BoardLayout;
   } catch {
     return null;
   }
 }
 
-function saveSlotCounts(code: string, counts: SlotCounts): void {
+function saveLayout(code: string, layout: BoardLayout): void {
   try {
-    localStorage.setItem(slotsKey(code), JSON.stringify(counts));
+    localStorage.setItem(slotsKey(code), JSON.stringify(layout));
   } catch {
     /* modo privado sin storage */
   }
@@ -85,7 +149,13 @@ function sanitize(raw: unknown): WatchEntry[] {
       const slot =
         typeof e.slot === 'number' && Number.isInteger(e.slot) && e.slot >= 0 ? e.slot : null;
       if (!out.some((x) => x.playerId === e.playerId)) {
-        out.push({ playerId: e.playerId, maxPrice, slot, note: cleanNote(e.note) });
+        out.push({
+          playerId: e.playerId,
+          maxPrice,
+          slot,
+          note: cleanNote(e.note),
+          group: cleanNote(e.group),
+        });
       }
     }
   }
@@ -131,8 +201,8 @@ function persistEntries(code: string, entries: WatchEntry[], synced: boolean): v
 interface WatchlistState {
   code: string | null;
   entries: WatchEntry[];
-  /** Slots por rol de la pizarra (null = todavía sin sembrar; solo localStorage). */
-  slotCounts: SlotCounts | null;
+  /** Layout de la pizarra (grupos + slots por rol; null = todavía sin sembrar; solo localStorage). */
+  layout: BoardLayout | null;
   /** true si el server aceptó el GET (a partir de ahí cada cambio se PUTea). */
   synced: boolean;
   init: (code: string, authed: boolean) => Promise<void>;
@@ -140,11 +210,14 @@ interface WatchlistState {
   setMaxPrice: (playerId: number, maxPrice: number | null) => void;
   /** Nota libre del slot (≤40 chars; vacío = null). */
   setNote: (playerId: number, note: string | null) => void;
-  /** Reasignación de slots en lote (mover/insertar/quitar; slot null = pool). */
-  setSlots: (changes: Array<{ playerId: number; slot: number | null }>) => void;
-  /** Siembra la cantidad de slots por rol la primera vez (sugerencia: cupos de la sala). */
-  ensureSlotCounts: (defaults: SlotCounts) => void;
-  setSlotCounts: (counts: SlotCounts) => void;
+  /** Reasignación de slots en lote (mover/insertar/quitar; slot null = pool).
+   *  Si el cambio trae `group`, también mueve al jugador a ese grupo. */
+  setSlots: (
+    changes: Array<{ playerId: number; slot: number | null; group?: string | null }>,
+  ) => void;
+  /** Siembra el layout la primera vez: un grupo default por rol con los cupos de la sala. */
+  ensureLayout: (defaults: Record<Role, number>) => void;
+  setLayout: (layout: BoardLayout) => void;
   /** Import: SUMA a la watchlist actual (sin duplicar; los campos entrantes pisan al existente). */
   mergeEntries: (incoming: WatchEntry[]) => void;
 }
@@ -152,12 +225,12 @@ interface WatchlistState {
 export const useWatchlist = create<WatchlistState>()((set, get) => ({
   code: null,
   entries: [],
-  slotCounts: null,
+  layout: null,
   synced: false,
 
   init: async (code, authed) => {
     const local = loadLocal(code);
-    set({ code, entries: local, slotCounts: loadSlotCounts(code), synced: false });
+    set({ code, entries: local, layout: loadLayout(code), synced: false });
     if (!authed || MOCK) return;
     try {
       const res = await fetch(`/api/rooms/${encodeURIComponent(code)}/watchlist`, {
@@ -186,7 +259,7 @@ export const useWatchlist = create<WatchlistState>()((set, get) => ({
     if (!code) return;
     const next = entries.some((e) => e.playerId === playerId)
       ? entries.filter((e) => e.playerId !== playerId)
-      : [...entries, { playerId, maxPrice: null, slot: null, note: null }];
+      : [...entries, { playerId, maxPrice: null, slot: null, note: null, group: null }];
     set({ entries: next });
     persistEntries(code, next, synced);
   },
@@ -212,38 +285,49 @@ export const useWatchlist = create<WatchlistState>()((set, get) => ({
   setSlots: (changes) => {
     const { code, entries, synced } = get();
     if (!code || changes.length === 0) return;
-    const byId = new Map(changes.map((c) => [c.playerId, c.slot] as const));
-    const next = entries.map((e) =>
-      byId.has(e.playerId) ? { ...e, slot: byId.get(e.playerId) ?? null } : e,
-    );
+    const byId = new Map(changes.map((c) => [c.playerId, c] as const));
+    const next = entries.map((e) => {
+      const c = byId.get(e.playerId);
+      if (!c) return e;
+      return {
+        ...e,
+        slot: c.slot,
+        ...('group' in c ? { group: cleanNote(c.group) } : {}),
+      };
+    });
     set({ entries: next });
     persistEntries(code, next, synced);
   },
 
-  ensureSlotCounts: (defaults) => {
-    const { code, slotCounts } = get();
-    if (!code || slotCounts !== null) return;
-    const seeded: SlotCounts = {
-      P: clampCount(defaults.P) ?? 0,
-      D: clampCount(defaults.D) ?? 0,
-      C: clampCount(defaults.C) ?? 0,
-      A: clampCount(defaults.A) ?? 0,
+  ensureLayout: (defaults) => {
+    const { code, layout } = get();
+    if (!code || layout !== null) return;
+    const seedRole = (n: number): RoleLayout => ({
+      groups: [{ name: null, count: clampCount(n) ?? 0, open: true }],
+      open: true,
+    });
+    const seeded: BoardLayout = {
+      P: seedRole(defaults.P),
+      D: seedRole(defaults.D),
+      C: seedRole(defaults.C),
+      A: seedRole(defaults.A),
     };
-    set({ slotCounts: seeded });
-    saveSlotCounts(code, seeded);
+    set({ layout: seeded });
+    saveLayout(code, seeded);
   },
 
-  setSlotCounts: (counts) => {
+  setLayout: (layout) => {
     const { code } = get();
     if (!code) return;
-    const next: SlotCounts = {
-      P: clampCount(counts.P) ?? 0,
-      D: clampCount(counts.D) ?? 0,
-      C: clampCount(counts.C) ?? 0,
-      A: clampCount(counts.A) ?? 0,
+    const fallback: RoleLayout = { groups: [{ name: null, count: 0, open: true }], open: true };
+    const next: BoardLayout = {
+      P: normalizeRole(layout.P) ?? fallback,
+      D: normalizeRole(layout.D) ?? fallback,
+      C: normalizeRole(layout.C) ?? fallback,
+      A: normalizeRole(layout.A) ?? fallback,
     };
-    set({ slotCounts: next });
-    saveSlotCounts(code, next);
+    set({ layout: next });
+    saveLayout(code, next);
   },
 
   mergeEntries: (incoming) => {
@@ -257,6 +341,7 @@ export const useWatchlist = create<WatchlistState>()((set, get) => ({
         maxPrice: e.maxPrice ?? prev?.maxPrice ?? null,
         slot: e.slot ?? prev?.slot ?? null,
         note: cleanNote(e.note) ?? prev?.note ?? null,
+        group: cleanNote(e.group) ?? prev?.group ?? null,
       });
     }
     const next = [...map.values()];

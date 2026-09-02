@@ -329,6 +329,16 @@ export function registerLeagueRoutes(app: FastifyInstance, { store, manager }: D
         entry.note = null;
       }
 
+      // Grupo de la pizarra: mismas reglas que note.
+      if (raw.group !== undefined && raw.group !== null) {
+        if (typeof raw.group !== 'string' || raw.group.trim().length > 40) {
+          return fail(reply, 400, 'group debe ser un texto de hasta 40 caracteres, o null');
+        }
+        entry.group = raw.group.trim() || null;
+      } else if (raw.group === null) {
+        entry.group = null;
+      }
+
       entries.push(entry); // campos desconocidos extra se stripean
     }
 

@@ -52,6 +52,9 @@ test('watchlist: seguir desde el listone con budget y verlo marcado al ser llama
   await panel.getByRole('button', { name: 'Segui Dimarco' }).click();
   // .first(): el panel lateral de desktop existe oculto en el DOM (hidden lg:block).
   await panel.getByLabel('Budget stimato per Dimarco').first().fill('30');
+  // Otro difensore para la prueba de grupos de más abajo.
+  await panel.getByPlaceholder(/Cerca giocatore/).fill('Bastoni');
+  await panel.getByRole('button', { name: 'Segui Bastoni' }).click();
 
   // El filtro "Solo watchlist" abre la pizarra y muestra la suma estimada.
   await panel.getByRole('button', { name: /Solo watchlist/ }).click();
@@ -77,6 +80,28 @@ test('watchlist: seguir desde el listone con budget y verlo marcado al ser llama
   await expect(
     panel2.getByRole('button', { name: 'Slot D 2', exact: true }).first(),
   ).toBeVisible();
+
+  // GRUPOS: creamos "Low cost" dentro de D y ubicamos ahí a Bastoni con el picker.
+  await panel2.getByRole('button', { name: 'Aggiungi gruppo in D' }).first().click();
+  await panel2.getByLabel('Nome del gruppo').first().fill('Low cost');
+  await panel2.getByLabel('Nome del gruppo').first().press('Enter');
+  await panel2
+    .getByRole('button', { name: 'Slot D 1 in Low cost', exact: true })
+    .first()
+    .click();
+  await panel2.getByRole('button', { name: 'Metti Bastoni in questo slot' }).first().click();
+  await expect(panel2.getByLabel('Nota per Bastoni').first()).toBeVisible();
+
+  // Segunda recarga: el nombre del grupo y la asignación adentro persisten.
+  await buzzer.reload();
+  await buzzer.getByRole('tab', { name: 'Listone' }).click();
+  const panel3 = buzzer.getByRole('tabpanel');
+  await panel3.getByRole('button', { name: /Solo watchlist/ }).click();
+  await expect(panel3.getByLabel('Nome del gruppo').first()).toHaveValue('Low cost');
+  await expect(panel3.getByLabel('Nota per Bastoni').first()).toBeVisible();
+  await expect(
+    panel3.getByRole('button', { name: 'Slot D 1 in Low cost', exact: true }),
+  ).toHaveCount(0);
 
   // El admin lo llama a subasta: el buzzer lo marca solo para este usuario.
   const admin = await openAdmin(browser, code, adminToken);

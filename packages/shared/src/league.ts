@@ -34,6 +34,11 @@ export interface WatchlistEntry {
   slot?: number | null;
   /** Etiqueta libre del usuario para este jugador/slot ("titolare", "scommessa"...). Máx 40 chars. */
   note?: string | null;
+  /**
+   * Agrupación libre DENTRO del rol, creada y nombrada por el usuario ("Portieri 1", "Titolari",
+   * "Low cost"...). Máx 40 chars; null/ausente = sin grupo. El índice `slot` ordena dentro del grupo.
+   */
+  group?: string | null;
 }
 export interface User {
   id: string;
