@@ -1,4 +1,12 @@
-import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { useParams } from 'react-router-dom';
 import {
   ROLES,
@@ -26,7 +34,7 @@ import { persist, type StoredTicket } from '../lib/persist';
 import { useProfile } from '../lib/profile';
 import { useSoundPref } from '../lib/sound';
 import { useAuctionSounds } from '../lib/useAuctionSounds';
-import { useWatchlist, type WatchEntry } from '../lib/watchlist';
+import { SLOT_CAP, useWatchlist, type WatchEntry } from '../lib/watchlist';
 import { csvCell, downloadTextFile, splitCsvLine } from '../lib/exports';
 import { useWakeLock } from '../lib/useWakeLock';
 import { useRoomGuard } from '../lib/useRoomGuard';
@@ -1139,11 +1147,8 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
   const [watchOnly, setWatchOnly] = useState(false);
   const [page, setPage] = useState(0);
   const [sheet, setSheet] = useState<Player | null>(null);
-  const entries = useWatchlist((s) => s.entries);
   const hideValues = state.config.hideValues;
   const me = state.participants.find((p) => p.id === meId);
-
-  const watchedIds = useMemo(() => new Set(entries.map((e) => e.playerId)), [entries]);
 
   const list = useMemo(() => {
     const q = normalize(query.trim());
@@ -1168,9 +1173,6 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
     });
     return out;
   }, [players, query, role, sort, hideValues, letter]);
-
-  /** Vista "Solo watchlist" (móvil): la lista filtrada a los seguidos. */
-  const watchList = useMemo(() => list.filter((p) => watchedIds.has(p.id)), [list, watchedIds]);
 
   // Cualquier cambio de búsqueda/filtro/orden vuelve a la página 1.
   useEffect(() => {
@@ -1240,7 +1242,7 @@ function ListoneTab({ state, meId }: { state: RoomState; meId: string }) {
       {/* móvil: toggle "Solo watchlist"; desktop: la watchlist vive en el panel de al lado */}
       {watchOnly && (
         <div className="lg:hidden">
-          <WatchlistView state={state} me={me} list={watchList} onSheet={setSheet} />
+          <WatchlistView state={state} me={me} onSheet={setSheet} />
         </div>
       )}
       <div className={watchOnly ? 'hidden lg:block' : ''}>
@@ -1429,11 +1431,19 @@ function WatchlistTools({ state }: { state: RoomState }) {
   }, [toast]);
 
   function exportCsv() {
-    const lines = ['id,nome,squadra,ruolo,budget'];
+    const lines = ['id,nome,squadra,ruolo,budget,slot,nota'];
     for (const e of entries) {
       const p = players.get(e.playerId);
       lines.push(
-        [e.playerId, csvCell(p?.name ?? ''), csvCell(p?.team ?? ''), p?.role ?? '', e.maxPrice ?? ''].join(','),
+        [
+          e.playerId,
+          csvCell(p?.name ?? ''),
+          csvCell(p?.team ?? ''),
+          p?.role ?? '',
+          e.maxPrice ?? '',
+          e.slot ?? '',
+          csvCell(e.note ?? ''),
+        ].join(','),
       );
     }
     downloadTextFile('fanta-watchlist.csv', lines.join('\n'));
@@ -1457,12 +1467,18 @@ function WatchlistTools({ state }: { state: RoomState }) {
           const name = (cells[1] ?? '').trim();
           const team = (cells[2] ?? '').trim();
           const budget = Math.floor(Number(cells[4]));
+          // Columnas opcionales de la pizarra: slot (orden 0-based) y nota libre.
+          const slotRaw = (cells[5] ?? '').trim();
+          const slotNum = Math.floor(Number(slotRaw));
+          const note = (cells[6] ?? '').trim();
           let player = Number.isFinite(id) ? players.get(id) : undefined;
           if (!player && name) player = byName.get(`${normalize(name)}|${normalize(team)}`);
           if (player) {
             incoming.push({
               playerId: player.id,
               maxPrice: Number.isFinite(budget) && budget > 0 ? budget : null,
+              slot: slotRaw !== '' && Number.isFinite(slotNum) && slotNum >= 0 ? slotNum : null,
+              note: note !== '' ? note.slice(0, 40) : null,
             });
           } else {
             ignored++;
@@ -1505,7 +1521,589 @@ function WatchlistTools({ state }: { state: RoomState }) {
   );
 }
 
-/** Panel hermano del listone (desktop): la watchlist siempre a la vista, agrupada por rol. */
+/* ————— pizarra de planificación: slots por rol creados por el usuario ————— */
+
+/** Jugador seguido con su entry (solo los presentes en el listone efectivo). */
+type Watched = { entry: WatchEntry; player: Player };
+type BoardCell = Watched | null;
+
+/** Pizarra táctica de la watchlist: casillas apiladas por rol. La CANTIDAD de casillas
+ *  la maneja el usuario (+/× por rol; sembrada la primera vez con los cupos de la sala)
+ *  y persiste solo en localStorage — al server viaja únicamente el `slot` (orden 0-based)
+ *  de cada seguido. Drag & drop nativo en desktop (insertar con corrimiento, no solo swap);
+ *  en móvil, picker en casillas vacías y menú su/giù/sposta/togli en las ocupadas.
+ *  Con el asta en vivo la pizarra se apaga: "✓ preso a N cr" o tachado con el comprador. */
+function WatchBoard({
+  state,
+  me,
+  onSheet,
+}: {
+  state: RoomState;
+  me: Participant | undefined;
+  onSheet: (p: Player) => void;
+}) {
+  const players = useStore((s) => s.players);
+  const code = useWatchlist((s) => s.code);
+  const entries = useWatchlist((s) => s.entries);
+  const slotCounts = useWatchlist((s) => s.slotCounts);
+  const setSlots = useWatchlist((s) => s.setSlots);
+  const setNote = useWatchlist((s) => s.setNote);
+  const ensureSlotCounts = useWatchlist((s) => s.ensureSlotCounts);
+  const setSlotCounts = useWatchlist((s) => s.setSlotCounts);
+  const { t } = useT();
+
+  const [dragging, setDragging] = useState<Player | null>(null);
+  /** Fuente de verdad durante el drag: los eventos dragover pueden llegar antes del
+   *  re-render de React, así que la lógica lee el ref y el estado solo pinta. */
+  const dragRef = useRef<Player | null>(null);
+  /** Casilla con feedback de rechazo suave (`${role}${i}`) al arrastrar/tocar rol equivocado. */
+  const [rejectKey, setRejectKey] = useState<string | null>(null);
+  const [picker, setPicker] = useState<{ role: Role; slot: number } | null>(null);
+  const [moving, setMoving] = useState<Player | null>(null);
+  const [menuFor, setMenuFor] = useState<number | null>(null);
+
+  // Primera apertura sin datos: sembramos los cupos de la sala como sugerencia.
+  useEffect(() => {
+    if (code && slotCounts === null) ensureSlotCounts(state.config.slots);
+  }, [code, slotCounts, ensureSlotCounts, state.config.slots]);
+
+  const counts = slotCounts ?? state.config.slots;
+
+  const watched: Watched[] = entries
+    .map((e) => ({ entry: e, player: players.get(e.playerId) }))
+    .filter((x): x is Watched => x.player !== undefined);
+
+  // Celdas por rol: entry.slot es la posición; huecos = casillas vacías. Slots fuera de
+  // rango o duplicados (p.ej. import) caen al pool "da sistemare" sin perderse.
+  const board = useMemo(() => {
+    const out = {} as Record<Role, { cells: BoardCell[]; pool: Watched[] }>;
+    for (const role of ROLES) {
+      const group = watched.filter((x) => x.player.role === role);
+      const maxSlot = group.reduce((m, x) => Math.max(m, x.entry.slot ?? -1), -1);
+      const n = Math.min(SLOT_CAP, Math.max(counts[role] ?? 0, maxSlot + 1));
+      const cells: BoardCell[] = Array.from({ length: n }, () => null);
+      const pool: Watched[] = [];
+      for (const x of group) {
+        const s = x.entry.slot;
+        if (s !== null && s >= 0 && s < n && cells[s] === null) cells[s] = x;
+        else pool.push(x);
+      }
+      out[role] = { cells, pool };
+    }
+    return out;
+    // players/entries/counts definen el tablero; watched deriva de ellos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, players, counts]);
+
+  function flashReject(key: string) {
+    setRejectKey(key);
+    window.setTimeout(() => setRejectKey((k) => (k === key ? null : k)), 600);
+  }
+
+  /** Inserta al jugador en la casilla `target` de su rol corriendo a los de abajo
+   *  hasta el primer hueco (si la columna está llena, crece un slot hasta el tope). */
+  function placeAt(playerId: number, role: Role, target: number) {
+    const ids = board[role].cells.map((c) => (c && c.player.id !== playerId ? c.player.id : null));
+    let carry: number | null = playerId;
+    for (let i = target; i < ids.length && carry !== null; i++) {
+      const tmp = ids[i] ?? null;
+      ids[i] = carry;
+      carry = tmp;
+    }
+    let grew = false;
+    if (carry !== null) {
+      if (ids.length < SLOT_CAP) {
+        ids.push(carry);
+        grew = true;
+      } else {
+        setSlots([{ playerId: carry, slot: null }]); // sin lugar: el desplazado vuelve al pool
+      }
+    }
+    const changes: Array<{ playerId: number; slot: number | null }> = [];
+    ids.forEach((id, idx) => {
+      if (id !== null) changes.push({ playerId: id, slot: idx });
+    });
+    setSlots(changes);
+    if (grew) setSlotCounts({ ...counts, [role]: ids.length });
+  }
+
+  /** Su/giù del menú móvil: intercambio con la casilla adyacente (vacía u ocupada). */
+  function swapCells(role: Role, a: number, b: number) {
+    const cells = board[role].cells;
+    if (b < 0 || b >= cells.length) return;
+    const changes: Array<{ playerId: number; slot: number | null }> = [];
+    const A = cells[a];
+    const B = cells[b];
+    if (A) changes.push({ playerId: A.player.id, slot: b });
+    if (B) changes.push({ playerId: B.player.id, slot: a });
+    if (changes.length > 0) setSlots(changes);
+  }
+
+  function addSlot(role: Role) {
+    setSlotCounts({ ...counts, [role]: Math.min(SLOT_CAP, board[role].cells.length + 1) });
+  }
+
+  /** Elimina la casilla i: su ocupante vuelve al pool y los de abajo suben un lugar. */
+  function removeSlotAt(role: Role, i: number) {
+    const cells = board[role].cells;
+    const changes: Array<{ playerId: number; slot: number | null }> = [];
+    const occ = cells[i];
+    if (occ) changes.push({ playerId: occ.player.id, slot: null });
+    cells.forEach((c, idx) => {
+      if (c && idx > i) changes.push({ playerId: c.player.id, slot: idx - 1 });
+    });
+    if (changes.length > 0) setSlots(changes);
+    setSlotCounts({ ...counts, [role]: Math.max(0, cells.length - 1) });
+    setPicker(null);
+  }
+
+  function dragProps(p: Player, sold: boolean) {
+    return {
+      draggable: !sold,
+      onDragStart: (e: React.DragEvent) => {
+        if ((e.target as HTMLElement).tagName === 'INPUT') {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.setData('text/plain', String(p.id));
+        e.dataTransfer.effectAllowed = 'move';
+        dragRef.current = p;
+        setDragging(p);
+        setMenuFor(null);
+        setPicker(null);
+      },
+      onDragEnd: () => {
+        dragRef.current = null;
+        setDragging(null);
+        setRejectKey(null);
+      },
+    };
+  }
+
+  /** Props de destino de drop para la casilla i del rol (rechazo suave si el rol no coincide). */
+  function dropProps(role: Role, i: number) {
+    const key = `${role}${i}`;
+    const over = (e: React.DragEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      if (d.role === role) e.preventDefault();
+      else setRejectKey(key);
+    };
+    return {
+      onDragEnter: over,
+      onDragOver: over,
+      onDragLeave: () => setRejectKey((k) => (k === key ? null : k)),
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        const d = dragRef.current;
+        if (d && d.role === role) placeAt(d.id, role, i);
+        dragRef.current = null;
+        setDragging(null);
+        setRejectKey(null);
+      },
+    };
+  }
+
+  const menuBtn =
+    'rounded-md border chalk-line px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-chalk-dim transition hover:text-chalk disabled:opacity-40';
+  const poolCount = ROLES.reduce((n, role) => n + board[role].pool.length, 0);
+  const rangeMode = state.config.slotsMin !== undefined || state.config.rosterSize != null;
+
+  return (
+    <div className="space-y-4">
+      {moving && (
+        <p className="animate-rise flex items-center justify-between gap-2 rounded-lg bg-gold/15 px-3 py-1.5 text-xs font-semibold text-gold">
+          <span className="truncate">
+            {moving.name} — {t('watch.moveHint')}
+          </span>
+          <button
+            type="button"
+            onClick={() => setMoving(null)}
+            className="shrink-0 underline decoration-dotted"
+          >
+            {t('watch.cancel')}
+          </button>
+        </p>
+      )}
+
+      {ROLES.map((role) => {
+        const { cells, pool } = board[role];
+        const subtotal = watched
+          .filter((x) => x.player.role === role)
+          .reduce((s, x) => s + (x.entry.maxPrice ?? 0), 0);
+        const min = rangeMode ? minSlots(state.config, role) : 0;
+        return (
+          <div key={role}>
+            <p className="mb-1 flex items-baseline gap-1.5">
+              <span
+                className={`text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[role].text}`}
+              >
+                {t(`role.${role}`)}
+              </span>
+              {min > 0 && (
+                <span className="rounded bg-pitch-800 px-1.5 py-px text-[10px] text-chalk-faint">
+                  {t('watch.minTag', { n: min })}
+                </span>
+              )}
+            </p>
+            <ul className="space-y-1.5">
+              {cells.map((cell, i) => {
+                const key = `${role}${i}`;
+                const reject = rejectKey === key;
+                const target =
+                  (dragging !== null && dragging.role === role && dragging.id !== cell?.player.id) ||
+                  (moving !== null && moving.role === role && moving.id !== cell?.player.id);
+                const removeBtn = (
+                  <button
+                    type="button"
+                    onClick={() => removeSlotAt(role, i)}
+                    aria-label={t('watch.removeSlotAria', { role, n: i + 1 })}
+                    className="w-6 shrink-0 self-stretch rounded-lg text-sm leading-none text-chalk-faint/70 transition hover:bg-danger/15 hover:text-danger"
+                  >
+                    ×
+                  </button>
+                );
+
+                if (!cell) {
+                  return (
+                    <li key={`empty-${i}`}>
+                      <div className="flex items-stretch gap-1">
+                        <button
+                          type="button"
+                          aria-label={t('watch.slotAria', { role, n: i + 1 })}
+                          onClick={() => {
+                            if (moving) {
+                              if (moving.role === role) {
+                                placeAt(moving.id, role, i);
+                                setMoving(null);
+                              } else {
+                                flashReject(key);
+                              }
+                              return;
+                            }
+                            setMenuFor(null);
+                            setPicker(
+                              picker && picker.role === role && picker.slot === i
+                                ? null
+                                : { role, slot: i },
+                            );
+                          }}
+                          {...dropProps(role, i)}
+                          className={`min-h-11 flex-1 rounded-lg border border-dashed px-2 text-center text-[11px] transition ${
+                            reject
+                              ? 'border-danger/70 text-danger'
+                              : target
+                                ? 'border-gold/70 text-gold'
+                                : i < min
+                                  ? 'border-chalk/30 text-chalk-faint'
+                                  : 'border-chalk/15 text-chalk-faint/80'
+                          }`}
+                        >
+                          {t('watch.dragHere')}
+                        </button>
+                        {removeBtn}
+                      </div>
+                      {picker && picker.role === role && picker.slot === i && (
+                        <div className="animate-rise mt-1 rounded-lg border chalk-line bg-pitch-900 p-2">
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-chalk-dim">
+                              {t('watch.pickerTitle')}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setPicker(null)}
+                              aria-label={t('buzzer.dismiss')}
+                              className="px-1 text-chalk-faint"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          {pool.length === 0 ? (
+                            <p className="py-1 text-[11px] text-chalk-faint">
+                              {t('watch.pickerEmpty')}
+                            </p>
+                          ) : (
+                            <ul className="max-h-48 space-y-0.5 overflow-y-auto">
+                              {pool.map((x) => (
+                                <li key={x.player.id}>
+                                  <button
+                                    type="button"
+                                    aria-label={t('watch.pickAria', { name: x.player.name })}
+                                    onClick={() => {
+                                      placeAt(x.player.id, role, i);
+                                      setPicker(null);
+                                    }}
+                                    className="flex w-full items-center gap-2 rounded px-1 py-1 text-left transition hover:bg-pitch-700"
+                                  >
+                                    <PlayerImg player={x.player} className="w-7 shrink-0" />
+                                    <span className="min-w-0 flex-1 truncate text-sm text-chalk">
+                                      {x.player.name}
+                                    </span>
+                                    {x.entry.maxPrice !== null && (
+                                      <span className="tabular shrink-0 text-xs font-bold text-gold">
+                                        {x.entry.maxPrice}
+                                      </span>
+                                    )}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                }
+
+                const p = cell.player;
+                const status = playerStatus(state, p.id);
+                const soldMine =
+                  status.kind === 'sold' && (me?.roster.some((e) => e.playerId === p.id) ?? false);
+                const soldOther = status.kind === 'sold' && !soldMine;
+                return (
+                  <li key={p.id}>
+                    <div className="flex items-stretch gap-1">
+                      <div
+                        {...dragProps(p, status.kind === 'sold')}
+                        {...dropProps(role, i)}
+                        className={`min-w-0 flex-1 rounded-lg border px-2 py-1.5 transition ${
+                          soldMine
+                            ? 'border-success/60 bg-success/10'
+                            : soldOther
+                              ? 'chalk-line bg-pitch-900/60 opacity-55'
+                              : reject
+                                ? 'border-danger/70 bg-pitch-800/70'
+                                : target
+                                  ? 'border-gold/60 bg-pitch-800/70'
+                                  : 'chalk-line bg-pitch-800/70 cursor-grab'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="tabular w-4 shrink-0 text-right text-[10px] text-chalk-faint">
+                            {i + 1}
+                          </span>
+                          <PlayerImg player={p} className="w-8 shrink-0" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (moving) {
+                                if (moving.id === p.id) setMoving(null);
+                                else if (moving.role === role) {
+                                  placeAt(moving.id, role, i);
+                                  setMoving(null);
+                                } else flashReject(key);
+                                return;
+                              }
+                              setPicker(null);
+                              setMenuFor(menuFor === p.id ? null : p.id);
+                            }}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <span
+                              className={`block truncate text-sm font-semibold ${
+                                soldOther ? 'text-chalk-dim line-through' : 'text-chalk'
+                              }`}
+                            >
+                              {p.name}
+                            </span>
+                            <span className="block truncate text-[10px]">
+                              {soldMine ? (
+                                <span className="font-bold text-success">
+                                  {t('watch.taken', { n: status.kind === 'sold' ? status.price : 0 })}
+                                </span>
+                              ) : soldOther && status.kind === 'sold' ? (
+                                <span className="text-chalk-faint">
+                                  {t('listone.sold', { name: status.name, n: status.price })}
+                                </span>
+                              ) : (
+                                <span className="text-chalk-faint">{p.team}</span>
+                              )}
+                            </span>
+                          </button>
+                          {status.kind !== 'sold' && <WatchMaxInput player={p} />}
+                        </div>
+                        {status.kind !== 'sold' && (
+                          <input
+                            value={cell.entry.note ?? ''}
+                            onChange={(e) => setNote(p.id, e.target.value)}
+                            maxLength={40}
+                            placeholder={t('watch.notePh')}
+                            aria-label={t('watch.noteAria', { name: p.name })}
+                            className="mt-1 w-full border-b border-transparent bg-transparent text-[11px] italic text-gold placeholder:not-italic placeholder:text-chalk-faint/80 focus:border-chalk/25 focus:outline-none"
+                          />
+                        )}
+                        {menuFor === p.id && !moving && (
+                          <div className="animate-rise mt-1.5 flex flex-wrap gap-1.5 border-t chalk-line pt-1.5">
+                            <button
+                              type="button"
+                              onClick={() => swapCells(role, i, i - 1)}
+                              disabled={i === 0}
+                              className={menuBtn}
+                            >
+                              ↑ {t('watch.moveUp')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => swapCells(role, i, i + 1)}
+                              disabled={i === cells.length - 1}
+                              className={menuBtn}
+                            >
+                              ↓ {t('watch.moveDown')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMoving(p);
+                                setMenuFor(null);
+                              }}
+                              className={menuBtn}
+                            >
+                              {t('watch.move')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSlots([{ playerId: p.id, slot: null }]);
+                                setMenuFor(null);
+                              }}
+                              className={menuBtn}
+                            >
+                              {t('watch.unslot')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onSheet(p);
+                                setMenuFor(null);
+                              }}
+                              className={menuBtn}
+                            >
+                              {t('admin.ficha')}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {removeBtn}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => addSlot(role)}
+                disabled={cells.length >= SLOT_CAP}
+                className="rounded-lg border border-dashed chalk-line px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-chalk-dim transition hover:text-chalk disabled:opacity-40"
+              >
+                {t('watch.addSlot')}
+              </button>
+              <span className="tabular text-[11px] text-chalk-faint">
+                {t('watch.subtotal', { n: subtotal })}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* pool "da sistemare": seguidos sin casilla, agrupados por rol; acepta drops para quitar slot */}
+      <div
+        onDragEnter={(e) => {
+          if (dragRef.current) e.preventDefault();
+        }}
+        onDragOver={(e) => {
+          if (dragRef.current) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (dragRef.current) setSlots([{ playerId: dragRef.current.id, slot: null }]);
+          dragRef.current = null;
+          setDragging(null);
+          setRejectKey(null);
+        }}
+        className={`rounded-xl border border-dashed p-2.5 transition ${
+          dragging ? 'border-gold/60' : 'chalk-line'
+        }`}
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-chalk-dim">
+          {t('watch.pool')}
+        </p>
+        {poolCount === 0 ? (
+          <p className="py-2 text-center text-xs text-chalk-faint">{t('watch.poolEmpty')}</p>
+        ) : (
+          <div className="mt-1.5 space-y-2">
+            {ROLES.map((role) =>
+              board[role].pool.length === 0 ? null : (
+                <div key={role}>
+                  <p
+                    className={`text-[10px] font-semibold uppercase tracking-widest ${ROLE_STYLES[role].text}`}
+                  >
+                    {t(`role.${role}`)}
+                  </p>
+                  <ul className="divide-y divide-chalk/10">
+                    {board[role].pool.map((x) => {
+                      const p = x.player;
+                      const status = playerStatus(state, p.id);
+                      const soldMine =
+                        status.kind === 'sold' &&
+                        (me?.roster.some((e) => e.playerId === p.id) ?? false);
+                      const soldOther = status.kind === 'sold' && !soldMine;
+                      return (
+                        <li key={p.id}>
+                          <div
+                            {...dragProps(p, status.kind === 'sold')}
+                            className={`flex items-center gap-2 py-1.5 ${
+                              soldOther ? 'opacity-55' : status.kind !== 'sold' ? 'cursor-grab' : ''
+                            }`}
+                          >
+                            <WatchStar
+                              player={p}
+                              className="flex h-8 w-8 items-center justify-center"
+                            />
+                            <PlayerImg player={p} className="w-8 shrink-0" />
+                            <button
+                              type="button"
+                              onClick={() => onSheet(p)}
+                              className="min-w-0 flex-1 text-left"
+                            >
+                              <span
+                                className={`block truncate text-sm font-semibold ${
+                                  soldOther ? 'text-chalk-dim line-through' : 'text-chalk'
+                                }`}
+                              >
+                                {p.name}
+                              </span>
+                              <span className="block truncate text-[10px]">
+                                {soldMine && status.kind === 'sold' ? (
+                                  <span className="font-bold text-success">
+                                    {t('watch.taken', { n: status.price })}
+                                  </span>
+                                ) : soldOther && status.kind === 'sold' ? (
+                                  <span className="text-chalk-faint">
+                                    {t('listone.sold', { name: status.name, n: status.price })}
+                                  </span>
+                                ) : (
+                                  <span className="text-chalk-faint">{p.team}</span>
+                                )}
+                              </span>
+                            </button>
+                            {status.kind !== 'sold' && <WatchMaxInput player={p} />}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ),
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Panel hermano del listone (desktop): la pizarra siempre a la vista. */
 function WatchlistPanel({
   state,
   meId,
@@ -1515,16 +2113,12 @@ function WatchlistPanel({
   meId: string;
   onSheet: (p: Player) => void;
 }) {
-  const players = useStore((s) => s.players);
   const entries = useWatchlist((s) => s.entries);
   const { t } = useT();
   const me = state.participants.find((p) => p.id === meId);
   const credits = me ? budgetRemaining(me, state.config) : 0;
   const total = entries.reduce((sum, e) => sum + (e.maxPrice ?? 0), 0);
   const over = me !== undefined && total > credits;
-  const watched = entries
-    .map((e) => players.get(e.playerId))
-    .filter((p): p is Player => p !== undefined);
 
   return (
     <div>
@@ -1534,35 +2128,12 @@ function WatchlistPanel({
         </p>
         <WatchlistTools state={state} />
       </div>
-      {watched.length === 0 ? (
-        <p className="mt-3 py-6 text-center text-sm text-chalk-faint">{t('watch.emptyHint')}</p>
-      ) : (
-        <div className="mt-3 space-y-3">
-          {ROLES.map((role) => {
-            const group = watched.filter((p) => p.role === role);
-            if (group.length === 0) return null;
-            const roleSum = group.reduce(
-              (sum, p) => sum + (entries.find((e) => e.playerId === p.id)?.maxPrice ?? 0),
-              0,
-            );
-            return (
-              <div key={role}>
-                <p className="mb-0.5 flex items-baseline justify-between">
-                  <span className={`text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[role].text}`}>
-                    {t(`role.${role}`)}
-                  </span>
-                  <span className="tabular text-xs text-chalk-faint">{roleSum} cr</span>
-                </p>
-                <ul className="divide-y divide-chalk/10">
-                  {group.map((p) => (
-                    <WatchPanelRow key={p.id} player={p} state={state} onSheet={() => onSheet(p)} />
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
+      {entries.length === 0 && (
+        <p className="mt-2 text-center text-xs text-chalk-faint">{t('watch.emptyHint')}</p>
       )}
+      <div className="mt-3">
+        <WatchBoard state={state} me={me} onSheet={onSheet} />
+      </div>
       <p
         className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${
           over ? 'bg-danger/15 text-danger' : 'bg-pitch-800/70 text-chalk-dim'
@@ -1575,46 +2146,14 @@ function WatchlistPanel({
   );
 }
 
-/** Fila compacta del panel de watchlist; los vendidos van tachados con quién se los llevó. */
-function WatchPanelRow({
-  player: p,
-  state,
-  onSheet,
-}: {
-  player: Player;
-  state: RoomState;
-  onSheet: () => void;
-}) {
-  const { t } = useT();
-  const status = playerStatus(state, p.id);
-  const sold = status.kind === 'sold';
-  return (
-    <li className={`flex items-center gap-2 py-2 ${sold ? 'opacity-55' : ''}`}>
-      <WatchStar player={p} className="flex h-9 w-9 items-center justify-center" />
-      <PlayerImg player={p} className="w-8 shrink-0" />
-      <button type="button" onClick={onSheet} className="min-w-0 flex-1 text-left">
-        <span className={`block truncate text-sm font-semibold text-chalk ${sold ? 'line-through' : ''}`}>
-          {p.name}
-        </span>
-        <span className="block truncate text-[11px] text-chalk-faint">
-          {status.kind === 'sold' ? t('listone.sold', { name: status.name, n: status.price }) : p.team}
-        </span>
-      </button>
-      <WatchMaxInput player={p} />
-    </li>
-  );
-}
-
-/** Vista "Solo watchlist": agrupada por rol, con suma de budgets estimados vs créditos. */
+/** Vista "Solo watchlist" (móvil): la misma pizarra, con totales arriba. */
 function WatchlistView({
   state,
   me,
-  list,
   onSheet,
 }: {
   state: RoomState;
   me: Participant | undefined;
-  list: Player[];
   onSheet: (p: Player) => void;
 }) {
   const { t } = useT();
@@ -1623,48 +2162,24 @@ function WatchlistView({
   const total = entries.reduce((sum, e) => sum + (e.maxPrice ?? 0), 0);
   const over = me !== undefined && total > credits;
 
-  if (list.length === 0) {
-    return (
-      <div className="mt-2">
-        <WatchlistTools state={state} />
-        <p className="mt-2 py-4 text-center text-sm text-chalk-faint">{t('watch.empty')}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="mt-2">
       <div className="mb-2">
         <WatchlistTools state={state} />
       </div>
-      <p className={`rounded-lg px-3 py-2 text-xs font-semibold ${over ? 'bg-danger/15 text-danger' : 'bg-pitch-800/70 text-chalk-dim'}`}>
+      <p
+        className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+          over ? 'bg-danger/15 text-danger' : 'bg-pitch-800/70 text-chalk-dim'
+        }`}
+      >
         {t('watch.total', { sum: total, left: credits })}
         {over && <span className="block">{t('watch.over')}</span>}
       </p>
-      <div className="mt-2 space-y-3">
-        {ROLES.map((role) => {
-          const group = list.filter((p) => p.role === role);
-          if (group.length === 0) return null;
-          const roleSum = group.reduce(
-            (sum, p) => sum + (entries.find((e) => e.playerId === p.id)?.maxPrice ?? 0),
-            0,
-          );
-          return (
-            <div key={role}>
-              <p className="mb-1 flex items-baseline justify-between">
-                <span className={`text-[11px] font-semibold uppercase tracking-widest ${ROLE_STYLES[role].text}`}>
-                  {t(`role.${role}`)}
-                </span>
-                <span className="tabular text-xs text-chalk-faint">{roleSum} cr</span>
-              </p>
-              <ul className="divide-y divide-chalk/10">
-                {group.map((p) => (
-                  <ListoneRow key={p.id} player={p} state={state} onSheet={() => onSheet(p)} />
-                ))}
-              </ul>
-            </div>
-          );
-        })}
+      {entries.length === 0 && (
+        <p className="mt-2 py-2 text-center text-sm text-chalk-faint">{t('watch.empty')}</p>
+      )}
+      <div className="mt-2">
+        <WatchBoard state={state} me={me} onSheet={onSheet} />
       </div>
     </div>
   );

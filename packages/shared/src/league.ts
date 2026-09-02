@@ -27,6 +27,13 @@ export interface WatchlistEntry {
   playerId: number;
   /** Presupuesto estimado que el usuario piensa gastar en él (null = sin estimar). */
   maxPrice: number | null;
+  /**
+   * Slot de la pizarra de planificación: índice (0-based) dentro de los cupos del rol del
+   * jugador; null = seguido pero sin ubicar en la pizarra. Puede haber más seguidos que slots.
+   */
+  slot?: number | null;
+  /** Etiqueta libre del usuario para este jugador/slot ("titolare", "scommessa"...). Máx 40 chars. */
+  note?: string | null;
 }
 export interface User {
   id: string;

@@ -53,9 +53,30 @@ test('watchlist: seguir desde el listone con budget y verlo marcado al ser llama
   // .first(): el panel lateral de desktop existe oculto en el DOM (hidden lg:block).
   await panel.getByLabel('Budget stimato per Dimarco').first().fill('30');
 
-  // El filtro "Solo watchlist" lo agrupa por rol y muestra la suma estimada.
+  // El filtro "Solo watchlist" abre la pizarra y muestra la suma estimada.
   await panel.getByRole('button', { name: /Solo watchlist/ }).click();
   await expect(panel.getByText('Stima totale 30 cr · ti restano 500').first()).toBeVisible();
+
+  // Pizarra: Dimarco espera en "Da sistemare"; lo ubicamos en el primer slot D con el
+  // picker móvil y le ponemos una etiqueta libre. (.first(): el panel desktop, oculto
+  // en 390px, duplica la pizarra en el DOM.)
+  await expect(panel.getByText('Da sistemare').first()).toBeVisible();
+  await panel.getByRole('button', { name: 'Slot D 1', exact: true }).first().click();
+  await panel.getByRole('button', { name: 'Metti Dimarco in questo slot' }).first().click();
+  const nota = panel.getByLabel('Nota per Dimarco').first();
+  await nota.fill('titolare');
+
+  // Recarga: el slot asignado y la nota persisten.
+  await buzzer.reload();
+  await buzzer.getByRole('tab', { name: 'Listone' }).click();
+  const panel2 = buzzer.getByRole('tabpanel');
+  await panel2.getByRole('button', { name: /Solo watchlist/ }).click();
+  await expect(panel2.getByLabel('Nota per Dimarco').first()).toHaveValue('titolare');
+  // El slot 1 de D quedó ocupado (ya no hay casilla vacía 1); el 2 sigue libre.
+  await expect(panel2.getByRole('button', { name: 'Slot D 1', exact: true })).toHaveCount(0);
+  await expect(
+    panel2.getByRole('button', { name: 'Slot D 2', exact: true }).first(),
+  ).toBeVisible();
 
   // El admin lo llama a subasta: el buzzer lo marca solo para este usuario.
   const admin = await openAdmin(browser, code, adminToken);

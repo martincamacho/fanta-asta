@@ -76,6 +76,38 @@ describe('watchlist privada pre-asta', () => {
     expect((await get()).json()).toEqual({ entries: [{ playerId: 133, maxPrice: 3 }] });
   });
 
+  it('pizarra: slot y note se guardan y devuelven; validaciones y retrocompat', async () => {
+    // PUT/GET con slot+note (note con trim; vacía → null; campos extra se stripean)
+    const saved = await put([
+      { playerId: 5841, maxPrice: 25, slot: 0, note: '  titolare  ', extra: 'fuera' },
+      { playerId: 2170, maxPrice: null, slot: null, note: null },
+      { playerId: 133, maxPrice: 3, note: '' },
+    ]);
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toEqual({
+      entries: [
+        { playerId: 5841, maxPrice: 25, slot: 0, note: 'titolare' },
+        { playerId: 2170, maxPrice: null, slot: null, note: null },
+        { playerId: 133, maxPrice: 3, note: null },
+      ],
+    });
+    expect((await get()).json()).toEqual(saved.json());
+
+    // validaciones
+    expect((await put([{ playerId: 1, maxPrice: null, slot: -1 }])).statusCode).toBe(400);
+    expect((await put([{ playerId: 1, maxPrice: null, slot: 50 }])).statusCode).toBe(400);
+    expect((await put([{ playerId: 1, maxPrice: null, slot: 1.5 }])).statusCode).toBe(400);
+    expect((await put([{ playerId: 1, maxPrice: null, note: 'x'.repeat(41) }])).statusCode).toBe(400);
+    expect((await put([{ playerId: 1, maxPrice: null, note: 42 }])).statusCode).toBe(400);
+    expect((await put([{ playerId: 49, maxPrice: null, slot: 49 }])).statusCode).toBe(200); // borde válido
+
+    // retrocompat: una lista guardada ANTES de la pizarra (sin slot/note) sigue válida
+    const me = await server.app.inject({ method: 'GET', url: '/api/auth/me', cookies: ana });
+    const userId = (me.json() as { user: { id: string } }).user.id;
+    server.store.setWatchlist(userId, code, [{ playerId: 7, maxPrice: 12 }]); // shape viejo, directo en la db
+    expect((await get()).json()).toEqual({ entries: [{ playerId: 7, maxPrice: 12 }] });
+  });
+
   it('401 sin sesión; 404 sala inexistente', async () => {
     const anon = await server.app.inject({ method: 'GET', url: `/api/rooms/${code}/watchlist` });
     expect(anon.statusCode).toBe(401);

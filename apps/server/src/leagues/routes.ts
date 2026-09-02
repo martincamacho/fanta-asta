@@ -307,7 +307,29 @@ export function registerLeagueRoutes(app: FastifyInstance, { store, manager }: D
       }
       if (seen.has(playerId)) return fail(reply, 400, 'La watchlist tiene jugadores repetidos');
       seen.add(playerId);
-      entries.push({ playerId, maxPrice: maxPrice as number | null });
+      const entry: WatchlistEntry = { playerId, maxPrice: maxPrice as number | null };
+
+      // Pizarra de planificación: slot 0..49 o null/ausente.
+      if (raw.slot !== undefined && raw.slot !== null) {
+        if (!Number.isInteger(raw.slot) || (raw.slot as number) < 0 || (raw.slot as number) > 49) {
+          return fail(reply, 400, 'slot debe ser un entero entre 0 y 49, o null');
+        }
+        entry.slot = raw.slot as number;
+      } else if (raw.slot === null) {
+        entry.slot = null;
+      }
+
+      // Etiqueta libre ≤40 chars; trim; vacía → null.
+      if (raw.note !== undefined && raw.note !== null) {
+        if (typeof raw.note !== 'string' || raw.note.trim().length > 40) {
+          return fail(reply, 400, 'note debe ser un texto de hasta 40 caracteres, o null');
+        }
+        entry.note = raw.note.trim() || null;
+      } else if (raw.note === null) {
+        entry.note = null;
+      }
+
+      entries.push(entry); // campos desconocidos extra se stripean
     }
 
     store.setWatchlist(user.id, code, entries);
