@@ -261,12 +261,13 @@ export function registerLeagueRoutes(app: FastifyInstance, { store, manager }: D
     if (!user) return reply;
     const code = (req.params as { code: string }).code.toUpperCase();
     if (!manager.getRoom(code)) return fail(reply, 404, 'La sala no existe');
-    // Salas de liga: exigen membresía. Salas "sueltas" (código/QR): alcanza con
-    // estar logueado — el equipo queda atado a la cuenta y se reconecta desde
-    // cualquier dispositivo.
+    // Filosofía "link = invitación": conocer el código alcanza (igual que el
+    // tablero y el export). Si la sala es de liga y el usuario logueado todavía
+    // no es miembro, se lo incorpora automáticamente — la puerta lateral
+    // amistosa; las invitaciones formales siguen siendo el camino prolijo.
     const league = store.leagueForRoom(code);
     if (league && !store.isMember(league.id, user.id)) {
-      return fail(reply, 403, 'No sos miembro de la liga de esta sala');
+      store.addMember(league.id, user.id);
     }
 
     return { participantId: store.getOrCreateTicket(code, user.id), name: user.name };

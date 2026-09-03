@@ -270,16 +270,31 @@ describe('ligas, invitaciones, astas y tickets', () => {
     expect((detail.json() as LeagueDetail).auctions.map((a) => a.roomCode)).toEqual([roomCode]);
   });
 
-  it('ticket: estable por (sala, usuario); miembro sí, no-miembro 403, sin sesión 401', async () => {
+  it('ticket: estable por (sala, usuario); no-miembro se INCORPORA a la liga (link = invitación); sin sesión 401', async () => {
     const anon = await server.app.inject({ method: 'GET', url: `/api/rooms/${roomCode}/ticket` });
     expect(anon.statusCode).toBe(401);
 
+    // Carla no era miembro: el link de la sala alcanza → ticket 200 + alta automática en la liga
     const outsider = await server.app.inject({
       method: 'GET',
       url: `/api/rooms/${roomCode}/ticket`,
       cookies: carla.cookies,
     });
-    expect(outsider.statusCode).toBe(403);
+    expect(outsider.statusCode).toBe(200);
+    const carlaTicket = outsider.json() as { participantId: string; name: string };
+    expect(carlaTicket.name).toBe('Carla');
+
+    // quedó en league_members: aparece como miembro en el detalle de la liga
+    const detail = await server.app.inject({ method: 'GET', url: `/api/leagues/${league.id}`, cookies: ana.cookies });
+    expect((detail.json() as LeagueDetail).members.map((m) => m.userId)).toContain(carla.user.id);
+
+    // y su ticket es estable en llamadas siguientes
+    const again = await server.app.inject({
+      method: 'GET',
+      url: `/api/rooms/${roomCode}/ticket`,
+      cookies: carla.cookies,
+    });
+    expect(again.json()).toEqual(carlaTicket);
 
     const t1 = await server.app.inject({ method: 'GET', url: `/api/rooms/${roomCode}/ticket`, cookies: beto.cookies });
     expect(t1.statusCode).toBe(200);
