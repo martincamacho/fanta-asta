@@ -299,9 +299,11 @@ describe('REST: listone por sala, export xlsx y config con rangos', () => {
     expect(body.length).toBeGreaterThan(1000);
     expect(body.subarray(0, 2).toString('latin1')).toBe('PK'); // magic de zip/xlsx
 
-    // el CSV usa el listone efectivo (nombre del jugador custom)
+    // formato Leghe: los jugadores de listone propio (id negativo) no existen
+    // en Leghe → quedan EXCLUIDOS del CSV (acá la única compra es el -1 → vacío)
     const csv = await server.app.inject({ method: 'GET', url: `/api/rooms/${code}/export/rose.csv` });
-    expect(csv.body).toContain('Ana,Jugador1,P,Equipo0,3');
+    expect(csv.statusCode).toBe(200);
+    expect(csv.body).toBe('');
   });
 
   it('GET /rosters: JSON público con listone efectivo, remaining con bonus y orden de compra', async () => {

@@ -237,7 +237,7 @@ export async function createServer(opts: CreateServerOptions = {}): Promise<Fant
     return reply
       .header('content-type', 'text/csv; charset=utf-8')
       .header('content-disposition', `attachment; filename="rose-${code}.csv"`)
-      .send(buildRoseCsv(room.state, room.effectivePlayers));
+      .send(buildRoseCsv(room.state));
   });
 
   app.get('/api/rooms/:code/export/rose.xlsx', async (req, reply) => {

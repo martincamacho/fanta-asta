@@ -17,9 +17,9 @@ describe('loader del listone', () => {
       { P: 0, D: 0, C: 0, A: 0 },
     );
 
-    // Archivo real 2026-27 al cierre del mercado: 537 jugadores únicos
-    expect(players.length).toBe(537);
-    expect(byRole).toEqual({ P: 64, D: 189, C: 194, A: 90 });
+    // Archivo real 2026-27 al cierre del mercado (+R. Rodriguez): 538 jugadores únicos
+    expect(players.length).toBe(538);
+    expect(byRole).toEqual({ P: 64, D: 190, C: 194, A: 90 });
 
     // ids únicos
     expect(new Set(players.map((p) => p.id)).size).toBe(players.length);

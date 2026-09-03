@@ -265,16 +265,16 @@ describe('perfil de jugador y export de rosas (REST)', () => {
     expect(warnings).toHaveLength(1);
   });
 
-  it('GET /api/rooms/:code/export/rose.csv → CSV ordenado por participante y rol P→D→C→A', async () => {
+  it('GET /api/rooms/:code/export/rose.csv → formato Leghe: squadra,id,costo sin header, orden de compra', async () => {
     const created = await server.app.inject({ method: 'POST', url: '/api/rooms', payload: {} });
     const { code } = created.json() as { code: string };
     const room = server.manager.getRoom(code)!;
 
     const anaJoin = room.join(undefined, 'Equipo Ana');
-    const betoJoin = room.join(undefined, 'Beto, FC'); // nombre con coma → se escapa
+    const betoJoin = room.join(undefined, 'Beto, FC'); // la coma se sanitiza (el parser de Leghe es naif)
     if (!anaJoin.ok || !betoJoin.ok) throw new Error('join falló');
 
-    // Compras de Ana en orden "desordenado" respecto al rol (ids reales del listone)
+    // Compras de Ana en orden "desordenado" respecto al rol: el export respeta el ORDEN DE COMPRA
     room.assign(5585, anaJoin.participantId, 30); // A - Malen (Roma)
     room.assign(5841, anaJoin.participantId, 19); // P - Svilar (Roma)
     room.assign(2170, betoJoin.participantId, 5); // P - Milinkovic-Savic V.
@@ -284,25 +284,17 @@ describe('perfil de jugador y export de rosas (REST)', () => {
     expect(res.headers['content-type']).toContain('text/csv');
     expect(res.headers['content-disposition']).toBe(`attachment; filename="rose-${code}.csv"`);
 
-    const lines = res.body.trim().split('\r\n');
-    expect(lines[0]).toBe('Fantasquadra,Calciatore,Ruolo,Squadra,Crediti');
-    // Ana primero (P antes que A pese al orden de compra), después Beto
-    expect(lines[1]).toContain('Equipo Ana,Svilar,P,Roma,19');
-    expect(lines[2]).toContain('Equipo Ana');
-    expect(lines[2]).toContain(',A,');
-    expect(lines[3]).toContain('"Beto, FC"'); // coma escapada
-    expect(lines[3]).toContain(',P,');
-    expect(lines).toHaveLength(4);
+    // sin header; una línea por compra; participante → orden de compra
+    expect(res.body).toBe('Equipo Ana,5585,30\r\nEquipo Ana,5841,19\r\nBeto  FC,2170,5\r\n');
 
     const missing = await server.app.inject({ method: 'GET', url: '/api/rooms/ZZZZZZ/export/rose.csv' });
     expect(missing.statusCode).toBe(404);
   });
 
-  it('el CSV usa el precio de la compra y el buildRoseCsv es determinístico', () => {
+  it('buildRoseCsv es determinístico y usa el precio de compra', () => {
     const { room } = makeRoom();
     const ana = joinPlayer(room, 'Ana');
     room.assign(101, ana, 42);
-    const csv = buildRoseCsv(room.state, makePlayers());
-    expect(csv).toBe('Fantasquadra,Calciatore,Ruolo,Squadra,Crediti\r\nAna,Portiere1,P,Test FC,42\r\n');
+    expect(buildRoseCsv(room.state)).toBe('Ana,101,42\r\n');
   });
 });

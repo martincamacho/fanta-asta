@@ -19,16 +19,23 @@ function csvField(value: string | number): string {
 }
 
 /**
- * CSV de rosas compatible con el import de Leghe Fantacalcio (formato flexible:
- * calciatore + fantasquadra obligatorios; precio recomendado; rol/equipo opcionales).
- * Una fila por compra; orden: participante, luego rol P→D→C→A.
+ * CSV compatible con el import REAL de Leghe Fantacalcio (verificado
+ * empíricamente): "una riga per calciatore, nel formato squadra,id,costo" —
+ * separado por comas, SIN header, una línea por compra, en orden participante →
+ * orden de compra. Los jugadores de listone propio (id negativo) no existen en
+ * Leghe: se excluyen del archivo, sin comentarios (romperían su parser).
  */
-export function buildRoseCsv(state: RoomState, players: ReadonlyMap<number, Player>): string {
-  const lines = ['Fantasquadra,Calciatore,Ruolo,Squadra,Crediti'];
-  for (const row of roseRows(state, players)) {
-    lines.push(row.map(csvField).join(','));
+export function buildRoseCsv(state: RoomState): string {
+  const lines: string[] = [];
+  for (const participant of state.participants) {
+    // El parser de Leghe es naif: comas o saltos de línea en el nombre lo romperían.
+    const squadra = participant.name.replace(/[,\r\n]+/g, ' ').trim();
+    for (const entry of participant.roster) {
+      if (entry.playerId < 0) continue;
+      lines.push(`${squadra},${entry.playerId},${entry.price}`);
+    }
   }
-  return `${lines.join('\r\n')}\r\n`;
+  return lines.length > 0 ? `${lines.join('\r\n')}\r\n` : '';
 }
 
 /** Filas del export (sin header): una por compra, orden participante → rol P→D→C→A. */
