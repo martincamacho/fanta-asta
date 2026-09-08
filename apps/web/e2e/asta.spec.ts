@@ -1,7 +1,20 @@
-import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import {
+  devices,
+  expect,
+  test,
+  type APIRequestContext,
+  type Browser,
+  type Page,
+} from '@playwright/test';
 
 /** E2E multi-cliente contra el server real (ver playwright.config.ts).
  *  La UI está en italiano por defecto (sin localStorage 'fanta:lang'). */
+
+/** En el project webkit-mobile los buzzers son iPhones de verdad (viewport chico,
+ *  touch, UA de Safari); el admin sigue en viewport desktop, como en un asta real. */
+function buzzerDevice(): Record<string, unknown> {
+  return test.info().project.name === 'webkit-mobile' ? { ...devices['iPhone 12'] } : {};
+}
 
 async function createRoom(
   request: APIRequestContext,
@@ -15,7 +28,7 @@ async function createRoom(
 /** Abre un buzzer en un context propio (un "celular") y entra por el flujo anónimo
  *  ("Continua senza account"): solo nombre de equipo. */
 async function joinBuzzer(browser: Browser, code: string, name: string): Promise<Page> {
-  const ctx = await browser.newContext({ locale: 'it-IT' });
+  const ctx = await browser.newContext({ ...buzzerDevice(), locale: 'it-IT' });
   const page = await ctx.newPage();
   await page.goto(`/sala/${code}`);
   await page.getByRole('button', { name: 'Continua senza account' }).click();
@@ -31,7 +44,7 @@ async function joinWithEmail(
   email: string,
   name: string,
 ): Promise<Page> {
-  const ctx = await browser.newContext({ locale: 'it-IT' });
+  const ctx = await browser.newContext({ ...buzzerDevice(), locale: 'it-IT' });
   const page = await ctx.newPage();
   await page.goto(`/sala/${code}`);
   await page.getByPlaceholder('tu@esempio.com').fill(email);
@@ -155,6 +168,60 @@ test('pausa y reanudación visibles en el buzzer', async ({ browser, request }) 
   await admin.getByRole('button', { name: 'Riprendi', exact: true }).click();
   await expect(buzzer.getByText('In pausa dal banditore')).toHaveCount(0);
   await expect(buzzer.getByText('Chiude tra')).toBeVisible();
+});
+
+test('vuelta del background: el buzzer se resincroniza con visibilitychange', async ({
+  browser,
+  request,
+}) => {
+  const { code, adminToken } = await createRoom(request);
+
+  // Buzzer con websocket "proxyado": congelarlo (tirar frames sin cerrar) reproduce
+  // el socket zombie de iOS al bloquear la pantalla — el cliente cree estar conectado.
+  const ctx = await browser.newContext({ ...buzzerDevice(), locale: 'it-IT' });
+  const buzzer = await ctx.newPage();
+  let frozen = false;
+  await buzzer.routeWebSocket(/\/socket\.io\//, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((m) => {
+      if (!frozen) server.send(m);
+    });
+    server.onMessage((m) => {
+      if (!frozen) ws.send(m);
+    });
+  });
+  await buzzer.goto(`/sala/${code}`);
+  await buzzer.getByRole('button', { name: 'Continua senza account' }).click();
+  // Nombre real del asta (largo y con apóstrofe) para vigilar el overflow en móvil.
+  await buzzer.getByPlaceholder('Nome della squadra').fill("C'è stato un MalenTeso");
+  await buzzer.getByRole('button', { name: 'Entra', exact: true }).click();
+  await expect(buzzer.getByText('In attesa della prossima chiamata')).toBeVisible();
+
+  const admin = await openAdmin(browser, code, adminToken);
+  await expect(admin.getByText('Partecipanti · 1')).toBeVisible();
+
+  // "Background": el transporte muere en silencio y el banditore llama un jugador.
+  frozen = true;
+  await callPlayer(admin, 'Barella');
+  await expect(admin.getByRole('heading', { name: 'Barella' }).first()).toBeVisible();
+  // El buzzer congelado no se enteró de nada.
+  await expect(buzzer.getByText('In attesa della prossima chiamata')).toBeVisible();
+  await expect(buzzer.getByRole('heading', { name: 'Barella' })).toHaveCount(0);
+
+  // "Vuelta": la red revive y el listener de visibilitychange re-emite room:join,
+  // que trae el snapshot fresco sin esperar el ping-timeout de socket.io.
+  frozen = false;
+  await buzzer.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect(buzzer.getByRole('heading', { name: 'Barella' })).toBeVisible();
+  // Re-join silencioso: sin flash del banner rojo de reconexión.
+  await expect(buzzer.getByText('Riconnessione…')).toHaveCount(0);
+
+  // Con la subasta en pantalla, nada debe desbordar horizontalmente (390px en
+  // webkit-mobile): nombres largos con apóstrofes, montos y la tira de pestañas.
+  const overflow = await buzzer.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
 });
 
 test('claim por email: el mismo equipo vuelve desde otro dispositivo', async ({

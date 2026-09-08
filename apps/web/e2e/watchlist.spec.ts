@@ -1,4 +1,11 @@
-import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import {
+  devices,
+  expect,
+  test,
+  type APIRequestContext,
+  type Browser,
+  type Page,
+} from '@playwright/test';
 
 /** Watchlist privada: seguir un jugador desde la pestaña Listone del buzzer con
  *  budget estimado y verlo marcado cuando sale a subasta. (UI en italiano.) */
@@ -14,7 +21,12 @@ async function createRoom(
 /** El buzzer es un celular: viewport móvil (el toggle "Solo watchlist" es solo <lg;
  *  en desktop la watchlist vive en el panel lateral siempre visible). */
 async function joinBuzzer(browser: Browser, code: string, name: string): Promise<Page> {
-  const ctx = await browser.newContext({ locale: 'it-IT', viewport: { width: 390, height: 844 } });
+  /* webkit-mobile: iPhone 12 real (touch + UA Safari); chromium: solo el viewport chico. */
+  const device =
+    test.info().project.name === 'webkit-mobile'
+      ? { ...devices['iPhone 12'] }
+      : { viewport: { width: 390, height: 844 } };
+  const ctx = await browser.newContext({ ...device, locale: 'it-IT' });
   const page = await ctx.newPage();
   await page.goto(`/sala/${code}`);
   await page.getByRole('button', { name: 'Continua senza account' }).click();

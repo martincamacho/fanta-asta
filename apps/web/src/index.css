@@ -60,7 +60,64 @@ body {
   color: var(--color-chalk);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh; /* fallback iOS <15.4 (sin dvh) */
   min-height: 100dvh;
+}
+
+/* iOS <15.4 no conoce dvh: las utilidades quedarían sin efecto y el layout
+   del buzzer/gate colapsaría. Fallback en vh (la barra de Safari lo compensa). */
+@supports not (min-height: 100dvh) {
+  .min-h-dvh {
+    min-height: 100vh;
+  }
+  .h-dvh {
+    height: 100vh;
+  }
+  .min-h-\[42dvh\] {
+    min-height: 42vh;
+  }
+  .max-h-\[50dvh\] {
+    max-height: 50vh;
+  }
+  .min-h-\[60dvh\] {
+    min-height: 60vh;
+  }
+  @media (min-width: 64rem) {
+    .lg\:h-dvh {
+      height: 100vh;
+    }
+  }
+}
+
+/* Sin delay de doble tap ni zoom por doble toque sobre lo interactivo:
+   crítico en el botón RILANCIA y los +5/+10 en plena subasta (iOS Safari). */
+button,
+[role='button'],
+a,
+input,
+select,
+textarea,
+summary,
+label {
+  touch-action: manipulation;
+}
+
+/* En las vistas de asta (buzzer/tablero/admin) tampoco queremos zoom por doble
+   toque sobre zonas no interactivas (montos, countdown) en plena subasta.
+   `manipulation` mantiene scroll y pinch-zoom. */
+.theme-buzz,
+.theme-buzz * {
+  touch-action: manipulation;
+}
+
+/* iOS hace zoom forzado al enfocar inputs con font-size <16px (offerta libera,
+   budgets de watchlist, notas, buscadores). Solo en iOS: mínimo 16px. */
+@supports (-webkit-touch-callout: none) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
+  }
 }
 
 /* Páginas de sitio: look fantacalcio claro (cards blancas, tinta navy, acento azul) */
@@ -134,6 +191,15 @@ body {
     radial-gradient(80rem 40rem at 15% -10%, hsl(217 93% 52% / 0.14), transparent 60%),
     radial-gradient(70rem 36rem at 85% -10%, hsl(257 76% 55% / 0.1), transparent 60%);
   background-attachment: fixed;
+}
+
+/* iOS Safari no soporta background-attachment: fixed (repaints gigantes y
+   glitches al scrollear con la barra dinámica): en iOS el gradiente scrollea. */
+@supports (-webkit-touch-callout: none) {
+  .buzz-bg,
+  .pitch-bg {
+    background-attachment: scroll;
+  }
 }
 
 /* Fondo de páginas de sitio */

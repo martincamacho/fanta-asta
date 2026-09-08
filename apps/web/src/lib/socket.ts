@@ -18,10 +18,12 @@ let socket: AppSocket | null = null;
 let joinPayload: JoinPayload | null = null;
 let everConnected = false;
 
-function doJoin(): void {
+function doJoin(quiet = false): void {
   if (!socket || !joinPayload) return;
   const store = useStore.getState();
-  store.setConnection(everConnected ? 'reconnecting' : 'connecting');
+  // `quiet`: re-join de cortesía con el socket ya conectado (vuelta del background) —
+  // sin pasar por 'reconnecting' para no flashear el banner rojo en cada regreso.
+  if (!quiet) store.setConnection(everConnected ? 'reconnecting' : 'connecting');
   socket.emit('room:join', joinPayload, (ack) => {
     const s = useStore.getState();
     if (ack.ok) {
@@ -64,6 +66,27 @@ function ensureSocket(): AppSocket {
     useStore.getState().flashError(payload);
   });
   return socket;
+}
+
+/** iOS Safari congela JS y mata el websocket al bloquear pantalla o cambiar de app.
+ *  Al volver (visibilitychange→visible, pageshow desde bfcache, online) forzamos la
+ *  reconexión sin esperar el ping-timeout de socket.io, y si el socket sigue "vivo"
+ *  re-emitimos room:join: el snapshot fresco recalibra serverOffset y el countdown. */
+function resyncOnReturn(): void {
+  if (!joinPayload || MOCK) return;
+  const s = ensureSocket();
+  if (s.connected) doJoin(true);
+  else s.connect();
+}
+
+if (typeof window !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') resyncOnReturn();
+  });
+  window.addEventListener('pageshow', (e: PageTransitionEvent) => {
+    if (e.persisted) resyncOnReturn();
+  });
+  window.addEventListener('online', resyncOnReturn);
 }
 
 /** Entra (o re-entra) a una sala. Idempotente: llamalo al montar la vista. */

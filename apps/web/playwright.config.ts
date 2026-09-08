@@ -1,6 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 /** e2e contra el server REAL: server en :3101 con DB temporal + build de la web
  *  servido por `vite preview` en :4173 (proxy /api, /campioncini y /socket.io → :3101). */
@@ -18,6 +18,12 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
   },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    /* Los amigos entran desde iPhone/Safari: buzzers en WebKit con viewport de
+     * iPhone 12 y touch (los helpers de los specs leen el device del project). */
+    { name: 'webkit-mobile', use: { ...devices['iPhone 12'] } },
+  ],
   webServer: [
     {
       command: 'pnpm --dir ../server start',
